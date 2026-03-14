@@ -73,7 +73,7 @@ export async function POST(req) {
       praksisvurdering: "",
       handlingspunkter: [],
       relevans: "middel",
-      url: `https://afgoerelsesdatabasen.dk/dokumenter/${r.DocumentPath}`,
+      url: `https://afgoerelsesdatabasen.dk/h/${r.HiveId}/${r.FullName}?showExact=true`,
     };
   }));
 
