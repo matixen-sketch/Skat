@@ -36,6 +36,7 @@ Returnér KUN et JSON-array med op til 5 afgørelsesobjekter. Ingen forklaring, 
       "Content-Type": "application/json",
       "x-api-key": process.env.ANTHROPIC_API_KEY,
       "anthropic-version": "2023-06-01",
+      "anthropic-beta": "web-search-2025-03-05",
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
@@ -46,6 +47,12 @@ Returnér KUN et JSON-array med op til 5 afgørelsesobjekter. Ingen forklaring, 
   });
 
   const data = await response.json();
+
+  if (!response.ok || !data.content) {
+    console.error("Anthropic fejl:", JSON.stringify(data));
+    return Response.json({ error: "Anthropic API fejl", details: data }, { status: 500 });
+  }
+
   const raw = data.content
     .filter(b => b.type === "text")
     .map(b => b.text)
@@ -56,6 +63,7 @@ Returnér KUN et JSON-array med op til 5 afgørelsesobjekter. Ingen forklaring, 
   try {
     return Response.json(JSON.parse(clean));
   } catch {
+    console.error("Parse fejl, råt svar:", raw);
     return Response.json({ error: "Parse fejl", raw }, { status: 500 });
   }
 }
