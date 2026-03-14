@@ -1,69 +1,81 @@
+const PORTAL_ID = "62c3f8f5-dca9-4058-918f-d8470a3ff3dd";
+const BASE_URL = `https://afgoerelsesdatabasen.dk/api/v1/portals/${PORTAL_ID}`;
+
+function periodeToFromDate(periode) {
+  const d = new Date();
+  if (periode === "Seneste uge") d.setDate(d.getDate() - 7);
+  else if (periode === "Seneste måned") d.setMonth(d.getMonth() - 1);
+  else if (periode === "Seneste 3 måneder") d.setMonth(d.getMonth() - 3);
+  return d.toISOString().split("T")[0];
+}
+
 export async function POST(req) {
-  const { område, periode } = await req.json();
+  const { periode } = await req.json();
+  const fromDate = periodeToFromDate(periode);
 
-  const datoTekst = new Date().toLocaleDateString("da-DK", {
-    day: "numeric", month: "long", year: "numeric",
-  });
-
-  const prompt = `Du er en erfaren dansk skatteretsadvokat og juridisk analytiker.
-Dags dato er ${datoTekst}.
-
-Brug web search til at finde 5 faktiske, nylige afgørelser fra Skatteankestyrelsen, Landsskatteretten eller Skatterådet.
-Søg på: site:info.skat.dk SKM2026 ${område === "Alle områder" ? "skat" : område}
-
-Periode: ${periode}
-Område: ${område === "Alle områder" ? "dansk skatteret generelt" : område}
-
-For hver afgørelse skal du returnere et JSON-objekt med disse felter:
-- id: sagsnummer fx SKM2026.123.LSR
-- dato: dato i format "DD. måned ÅÅÅÅ"
-- titel: præcis juridisk beskrivelse af det retlige spørgsmål
-- instans: "Landsskatteretten", "Skatterådet" eller "Skatteankestyrelsen"
-- område: retsområde
-- sagstype: "Stadfæstelse", "Medhold", "Delvist medhold", "Hjemvisning" eller "Bindende svar"
-- resumé: præcist juridisk resumé af sagens faktum og retlige spørgsmål (3-4 sætninger)
-- afgørelse: afgørelsens resultat og centrale begrundelse (2-3 sætninger)
-- praksisvurdering: afgørelsens betydning for retspraksis (2-3 sætninger)
-- handlingspunkter: array med 2 konkrete råd til skatteadvokater
-- relevans: "høj", "middel" eller "lav"
-- url: direkte link til afgørelsen på info.skat.dk hvis fundet
-
-Returnér KUN et JSON-array med op til 5 afgørelsesobjekter. Ingen forklaring, ingen markdown-backticks.`;
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  // 1. Hent liste over nyeste afgørelser
+  const searchRes = await fetch(`${BASE_URL}/search`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "anthropic-beta": "web-search-2025-03-05",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4000,
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
-      messages: [{ role: "user", content: prompt }],
+      fieldSetName: "SearchResultFields",
+      criteria: { status: ["Effective"] },
+      ordering: { descending: true, fieldName: "date_release" },
+      page: 1,
+      skip: 0,
+      slices: false,
+      snippets: false,
+      take: 10,
     }),
   });
 
-  const data = await response.json();
-
-  if (!response.ok || !data.content) {
-    console.error("Anthropic fejl:", JSON.stringify(data));
-    return Response.json({ error: "Anthropic API fejl", details: data }, { status: 500 });
+  if (!searchRes.ok) {
+    return Response.json({ error: "Søgning fejlede" }, { status: 500 });
   }
 
-  const raw = data.content
-    .filter(b => b.type === "text")
-    .map(b => b.text)
-    .join("");
+  const searchData = await searchRes.json();
+  const results = Array.isArray(searchData.Results) ? searchData.Results : [];
 
-  const clean = raw.replace(/```json|```/g, "").trim();
+  // Filtrer på dato
+  const filtered = results.filter(r => {
+    const d = r.date_created || r.date_release;
+    return d && d >= fromDate;
+  }).slice(0, 5);
 
-  try {
-    return Response.json(JSON.parse(clean));
-  } catch {
-    console.error("Parse fejl, råt svar:", raw);
-    return Response.json({ error: "Parse fejl", raw }, { status: 500 });
+  if (filtered.length === 0) {
+    return Response.json([]);
   }
+
+  // 2. Hent detaljer for hver afgørelse
+  const afgørelser = await Promise.all(filtered.map(async (r) => {
+    const url = `${BASE_URL}/portaldocuments/${r.DocumentPath}`;
+    let tekst = "";
+    try {
+      const docRes = await fetch(`https://afgoerelsesdatabasen.dk/${r.DocumentInfoUrl}`);
+      if (docRes.ok) {
+        const doc = await docRes.json();
+        tekst = doc.summary || doc.abstract || doc.description || "";
+      }
+    } catch {}
+
+    const dato = new Date(r.date_release || r.date_created);
+    const datoStr = dato.toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" });
+
+    return {
+      id: r.FullName || r.title,
+      dato: datoStr,
+      titel: r.title || r.FullName,
+      instans: "Landsskatteretten",
+      område: "Landsskatteretten",
+      sagstype: r.document_type || "Afgørelse",
+      resumé: tekst || "Se afgørelsen direkte på afgoerelsesdatabasen.dk",
+      afgørelse: "",
+      praksisvurdering: "",
+      handlingspunkter: [],
+      relevans: "middel",
+      url: `https://afgoerelsesdatabasen.dk/dokumenter/${r.DocumentPath}`,
+    };
+  }));
+
+  return Response.json(afgørelser);
 }
