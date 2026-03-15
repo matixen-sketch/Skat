@@ -1,7 +1,6 @@
 "use client";
 import { useState, useCallback } from "react";
 
-const PERIODER = ["Seneste uge", "Seneste måned", "Seneste 3 måneder"];
 const SAGSTYPER = ["Alle", "Medhold", "Delvist medhold", "Stadfæstelse", "Hjemvisning", "Nedsættelse", "Bindende svar"];
 const RELEVANS_CONFIG = {
   høj: { label: "Høj relevans", color: "bg-red-50 text-red-700 border-red-200" },
@@ -41,7 +40,7 @@ function Section({ titel, ikon, fremhæv, children }) {
   );
 }
 
-// ── Overblik trin ────────────────────────────────────────────────────
+// ── Overblik panel ────────────────────────────────────────────────────
 function OverblikPanel({ overblik, onAnalyser, onHentFlere, onHentAlle, loadingFlere, loadingAlle }) {
   const [valgte, setValgte] = useState(() => {
     const init = {};
@@ -63,9 +62,9 @@ function OverblikPanel({ overblik, onAnalyser, onHentFlere, onHentAlle, loadingF
       <div className="bg-white border border-slate-200 rounded-xl px-5 py-4">
         <div className="flex items-start justify-between gap-4 mb-2">
           <div>
-            <span className="text-sm font-semibold text-slate-700">
+            <p className="text-sm font-semibold text-slate-700">
               Fandt {overblik.totalCount} afgørelser — vælg hvad der skal analyseres
-            </span>
+            </p>
             {overblik.databaseTotal > overblik.totalCount && (
               <p className="text-xs text-slate-400 font-sans mt-0.5">
                 Databasen indeholder i alt {overblik.databaseTotal} afgørelser for denne søgning
@@ -74,16 +73,22 @@ function OverblikPanel({ overblik, onAnalyser, onHentFlere, onHentAlle, loadingF
           </div>
           <span className="text-xs text-slate-400 font-sans whitespace-nowrap">{antalValgte} valgt</span>
         </div>
-        <p className="text-xs text-slate-400 font-sans">AI har grupperet resultaterne nedenfor. Vælg grupper eller enkeltafgørelser og klik Analyser.</p>
+        <p className="text-xs text-slate-400 font-sans mb-3">
+          AI har grupperet resultaterne nedenfor. Vælg grupper eller enkeltafgørelser og klik Analyser.
+        </p>
         {overblik.harFlere && (
-          <div className="flex gap-2 mt-3">
+          <div className="flex flex-wrap gap-2">
             <button onClick={onHentFlere} disabled={loadingFlere || loadingAlle}
-              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-400 font-sans disabled:opacity-50 flex items-center gap-1.5">
-              {loadingFlere ? <><span className="w-3 h-3 border border-slate-400 border-t-slate-700 rounded-full animate-spin inline-block" />Henter...</> : "＋ Hent næste 150 afgørelser"}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-400 font-sans disabled:opacity-50 flex items-center gap-1.5 transition-colors">
+              {loadingFlere
+                ? <><span className="w-3 h-3 border border-slate-300 border-t-slate-600 rounded-full animate-spin" />Henter…</>
+                : "＋ Hent næste 150 afgørelser"}
             </button>
             <button onClick={onHentAlle} disabled={loadingFlere || loadingAlle}
-              className="text-xs px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 hover:border-amber-400 font-sans disabled:opacity-50 flex items-center gap-1.5">
-              {loadingAlle ? <><span className="w-3 h-3 border border-amber-300 border-t-amber-600 rounded-full animate-spin inline-block" />Henter alle...</> : `⬇ Søg i alle ${overblik.databaseTotal} afgørelser`}
+              className="text-xs px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 font-sans disabled:opacity-50 flex items-center gap-1.5 transition-colors">
+              {loadingAlle
+                ? <><span className="w-3 h-3 border border-amber-300 border-t-amber-600 rounded-full animate-spin" />Henter alle…</>
+                : `⬇ Søg i alle ${overblik.databaseTotal} afgørelser`}
             </button>
           </div>
         )}
@@ -103,11 +108,13 @@ function OverblikPanel({ overblik, onAnalyser, onHentFlere, onHentAlle, loadingF
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-semibold text-slate-800">{g.navn}</span>
                   <Tag color="bg-slate-100 text-slate-500">{g.indeks.length} afgørelser</Tag>
-                  <Tag color="bg-slate-50 text-slate-400">{g.årsSpænd}</Tag>
+                  {g.årsSpænd && <Tag color="bg-slate-50 text-slate-400">{g.årsSpænd}</Tag>}
                 </div>
                 <p className="text-xs text-slate-500 font-sans mt-0.5">{g.beskrivelse}</p>
                 {g.anbefaletBegrundelse && (
-                  <p className="text-xs text-amber-600 font-sans mt-1">★ {g.anbefaletBegrundelse}</p>
+                  <p className="text-xs text-amber-600 font-sans mt-1.5 flex items-start gap-1">
+                    <span>★</span><span>{g.anbefaletBegrundelse}</span>
+                  </p>
                 )}
               </div>
             </div>
@@ -117,7 +124,7 @@ function OverblikPanel({ overblik, onAnalyser, onHentFlere, onHentAlle, loadingF
                 if (!hit) return null;
                 const anbefalet = g.anbefalede?.includes(i);
                 return (
-                  <label key={i} className={`flex items-start gap-3 px-5 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors ${valgte[i] ? "bg-amber-50/30" : ""}`}>
+                  <label key={i} className={`flex items-start gap-3 px-5 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors ${valgte[i] ? "bg-amber-50/40" : ""}`}>
                     <input type="checkbox" checked={!!valgte[i]} onChange={() => toggleIndeks(i)} className="mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -145,7 +152,7 @@ function OverblikPanel({ overblik, onAnalyser, onHentFlere, onHentAlle, loadingF
   );
 }
 
-// ── Klient modal ─────────────────────────────────────────────────────
+// ── Klient modal ──────────────────────────────────────────────────────
 function KlientModal({ spørgsmål, onClose }) {
   const [svar, setSvar] = useState("");
   const [vurdering, setVurdering] = useState("");
@@ -169,7 +176,11 @@ function KlientModal({ spørgsmål, onClose }) {
         <textarea value={svar} onChange={e => setSvar(e.target.value)}
           placeholder="Beskriv klientens situation..."
           className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-sans outline-none focus:border-slate-400 resize-none h-24 mb-3" />
-        {vurdering && <div className="bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 mb-3"><p className="text-sm text-slate-700 font-sans">{vurdering}</p></div>}
+        {vurdering && (
+          <div className="bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 mb-3">
+            <p className="text-sm text-slate-700 font-sans">{vurdering}</p>
+          </div>
+        )}
         <div className="flex gap-2 justify-end">
           <button onClick={onClose} className="px-4 py-2 text-sm text-slate-500 font-sans">Luk</button>
           <button onClick={vurder} disabled={loading || !svar}
@@ -190,7 +201,7 @@ function RelateredeModal({ nøgleord, onClose }) {
     fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handling: "relaterede", søgeTekst: nøgleord?.slice(0,2).join(" ") }),
+      body: JSON.stringify({ handling: "relaterede", søgeTekst: nøgleord?.slice(0, 2).join(" ") }),
     }).then(r => r.json()).then(setData);
   }, []);
   return (
@@ -226,7 +237,7 @@ function AfgørelseKort({ a, åben, onToggle, onGemToggle, gemt, noter, onNoterC
       `RESUMÉ`, a.resumé, "", `AFGØRELSE`, a.afgørelse, "",
       `BETYDNING FOR PRAKSIS`, a.praksisvurdering, "",
       `LOVHENVISNINGER: ${a.lovhenvisninger?.join(", ") || "–"}`, "",
-      `HANDLINGSPUNKTER`, ...(a.handlingspunkter?.map((h, i) => `${i+1}. ${h}`) || []),
+      `HANDLINGSPUNKTER`, ...(a.handlingspunkter?.map((h, i) => `${i + 1}. ${h}`) || []),
       "", noter ? `NOTER\n${noter}` : "", "", `LINK: ${a.url}`,
     ].join("\n");
     const blob = new Blob([tekst], { type: "text/plain;charset=utf-8" });
@@ -283,7 +294,7 @@ function AfgørelseKort({ a, åben, onToggle, onGemToggle, gemt, noter, onNoterC
                 <ul className="space-y-1.5 mt-2">
                   {a.handlingspunkter.map((h, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-slate-600 font-sans">
-                      <span className="text-amber-500 font-bold flex-shrink-0 mt-0.5">{i+1}.</span><span>{h}</span>
+                      <span className="text-amber-500 font-bold flex-shrink-0 mt-0.5">{i + 1}.</span><span>{h}</span>
                     </li>
                   ))}
                 </ul>
@@ -300,11 +311,21 @@ function AfgørelseKort({ a, åben, onToggle, onGemToggle, gemt, noter, onNoterC
               )}
             </div>
             <div className="flex flex-wrap gap-2 pt-1">
-              {a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-400 font-sans">Se på afgoerelsesdatabasen.dk →</a>}
-              <button onClick={() => setVisRelaterede(true)} className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-400 font-sans">🔗 Relaterede</button>
-              {a.klientrelevans_spørgsmål && <button onClick={() => setVisKlient(true)} className="text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 hover:border-blue-400 font-sans">👤 Klientrelevans</button>}
-              <button onClick={onGemToggle} className={`text-xs px-3 py-1.5 rounded-lg border font-sans ${gemt ? "border-amber-300 text-amber-600 bg-amber-50" : "border-slate-200 text-slate-600 hover:border-amber-300"}`}>{gemt ? "★ Gemt" : "☆ Gem"}</button>
-              <button onClick={eksporter} className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-400 font-sans">↓ Eksporter</button>
+              {a.url && (
+                <a href={a.url} target="_blank" rel="noopener noreferrer"
+                  className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-400 font-sans transition-colors">
+                  Se på afgoerelsesdatabasen.dk →
+                </a>
+              )}
+              <button onClick={() => setVisRelaterede(true)} className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-400 font-sans transition-colors">🔗 Relaterede</button>
+              {a.klientrelevans_spørgsmål && (
+                <button onClick={() => setVisKlient(true)} className="text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 hover:border-blue-400 font-sans transition-colors">👤 Klientrelevans</button>
+              )}
+              <button onClick={onGemToggle}
+                className={`text-xs px-3 py-1.5 rounded-lg border font-sans transition-colors ${gemt ? "border-amber-300 text-amber-600 bg-amber-50" : "border-slate-200 text-slate-600 hover:border-amber-300"}`}>
+                {gemt ? "★ Gemt" : "☆ Gem"}
+              </button>
+              <button onClick={eksporter} className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-400 font-sans transition-colors">↓ Eksporter</button>
             </div>
           </div>
         )}
@@ -324,9 +345,9 @@ function SammendragPanel({ s }) {
         <span className={`text-xs font-medium px-2 py-0.5 rounded border ${tc}`}>{s.tendens}</span>
       </div>
       <p className="text-sm text-slate-700 leading-relaxed font-sans">{s.sammendrag}</p>
-      <div className="flex gap-4 text-xs font-sans text-slate-500">
+      <div className="flex gap-4 text-xs font-sans">
         <span className="text-emerald-600 font-semibold">✓ Medhold: {s.medhold_antal}</span>
-        <span>≈ Stadfæstelse: {s.stadfæstelse_antal}</span>
+        <span className="text-slate-500">≈ Stadfæstelse: {s.stadfæstelse_antal}</span>
         <span className="text-blue-600">↩ Hjemvisning: {s.hjemvisning_antal}</span>
       </div>
       {s.vigtigste_pointe && (
@@ -346,12 +367,14 @@ function SammendragPanel({ s }) {
 
 // ── Hoved-app ─────────────────────────────────────────────────────────
 export default function Page() {
-  const [trin, setTrin] = useState("start"); // start | overblik | resultater
+  const [trin, setTrin] = useState("start");
   const [overblik, setOverblik] = useState(null);
   const [cacheId, setCacheId] = useState(null);
   const [afgørelser, setAfgørelser] = useState([]);
   const [sammendrag, setSammendrag] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingFlere, setLoadingFlere] = useState(false);
+  const [loadingAlle, setLoadingAlle] = useState(false);
   const [loadingTekst, setLoadingTekst] = useState("");
   const [fejl, setFejl] = useState(null);
   const [åbenId, setÅbenId] = useState(null);
@@ -363,9 +386,9 @@ export default function Page() {
   const [visKunGemte, setVisKunGemte] = useState(false);
 
   const søg = useCallback(async () => {
-    setFejl(null); setLoading(true);
+    setFejl(null); setLoading(true); setTrin("start");
     if (søgeTekst || sagsbeskrivelse) {
-      setLoadingTekst("Søger i alle afgørelser…");
+      setLoadingTekst("Søger i afgørelsesdatabasen…");
       try {
         const res = await fetch("/api/analyze", {
           method: "POST",
@@ -378,7 +401,7 @@ export default function Page() {
         setTrin("overblik");
       } catch (e) { setFejl("Søgning fejlede: " + e.message); }
     } else {
-      setLoadingTekst("Henter og analyserer afgørelser…");
+      setLoadingTekst("Henter nyeste afgørelser…");
       try {
         const res = await fetch("/api/analyze", {
           method: "POST",
@@ -394,8 +417,23 @@ export default function Page() {
     setLoading(false);
   }, [søgeTekst, sagsbeskrivelse, valgtSagstype]);
 
-  const [loadingFlere, setLoadingFlere] = useState(false);
-  const [loadingAlle, setLoadingAlle] = useState(false);
+  const analyser = useCallback(async (valgteIndeks) => {
+    setLoading(true);
+    setLoadingTekst(`Henter og analyserer ${valgteIndeks.length} afgørelser…`);
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ handling: "analyser", valgteIndeks, cacheId }),
+      });
+      if (!res.ok) throw new Error("Serverfejl");
+      const data = await res.json();
+      setAfgørelser(data.afgørelser || []);
+      setSammendrag(data.sammendrag || null);
+      setTrin("resultater");
+    } catch (e) { setFejl("Analyse fejlede: " + e.message); }
+    setLoading(false);
+  }, [cacheId]);
 
   const hentFlere = useCallback(async () => {
     setLoadingFlere(true);
@@ -438,24 +476,8 @@ export default function Page() {
     } catch (e) { setFejl("Kunne ikke hente alle: " + e.message); }
     setLoadingAlle(false);
   }, [cacheId, søgeTekst, sagsbeskrivelse]);
-    setLoading(true);
-    setLoadingTekst(`Analyserer ${valgteIndeks.length} afgørelser med AI…`);
-    try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ handling: "analyser", valgteIndeks, cacheId }),
-      });
-      const data = await res.json();
-      setAfgørelser(data.afgørelser || []);
-      setSammendrag(data.sammendrag || null);
-      setTrin("resultater");
-    } catch (e) { setFejl("Analyse fejlede: " + e.message); }
-    setLoading(false);
-  }, [cacheId]);
 
-  const nulstil = () => { setTrin("start"); setOverblik(null); setAfgørelser([]); setSammendrag(null); setFejl(null); };
-
+  const nulstil = () => { setTrin("start"); setOverblik(null); setAfgørelser([]); setSammendrag(null); setFejl(null); setCacheId(null); };
   const toggleGem = id => setGemte(g => ({ ...g, [id]: !g[id] }));
   const updateNote = (id, t) => setNoter(n => ({ ...n, [id]: t }));
   const visteListe = visKunGemte ? afgørelser.filter(a => gemte[a.id]) : afgørelser;
@@ -489,7 +511,9 @@ export default function Page() {
         <div className="max-w-3xl mx-auto px-6 py-5 space-y-4">
           <div className="space-y-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 font-sans">Søg på emne eller lovbestemmelse</label>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 font-sans">
+                Søg på emne eller lovbestemmelse
+              </label>
               <input type="text" value={søgeTekst} onChange={e => setSøgeTekst(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && søg()}
                 placeholder='fx "ligningslovens § 8 y", "fri bil", "transfer pricing"'
@@ -497,14 +521,15 @@ export default function Page() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 font-sans">
-                Beskriv din konkrete sag <span className="text-slate-400 normal-case font-normal">(valgfrit — bruges til at finde de mest relevante afgørelser)</span>
+                Beskriv din konkrete sag{" "}
+                <span className="text-slate-400 normal-case font-normal">(valgfrit — bruges til at finde de mest relevante afgørelser)</span>
               </label>
               <textarea value={sagsbeskrivelse} onChange={e => setSagsbeskrivelse(e.target.value)}
                 placeholder="fx: Min klient er selvstændig konsulent der ønsker at fradrage udgifter til hjemmekontor. Skattestyrelsen har nægtet fradrag med henvisning til at arbejdet primært udføres hos klienterne..."
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-400 font-sans resize-none h-20" />
             </div>
           </div>
-          <div className="flex flex-wrap gap-3 items-end">
+          <div className="flex flex-wrap gap-3 items-center">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 font-sans">Udfald</label>
               <select value={valgtSagstype} onChange={e => setValgtSagstype(e.target.value)}
@@ -513,18 +538,20 @@ export default function Page() {
               </select>
             </div>
             <button onClick={søg} disabled={loading}
-              className="px-6 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 font-sans"
+              className="px-6 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 font-sans mt-5"
               style={{ background: loading ? "#64748b" : "#18293d" }}>
-              {loading ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />Søger…</span> : "Søg"}
+              {loading
+                ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />Søger…</span>
+                : "Søg"}
             </button>
             {trin !== "start" && (
-              <button onClick={nulstil} className="px-4 py-2 rounded-lg text-sm text-slate-500 border border-slate-200 hover:border-slate-400 font-sans">
+              <button onClick={nulstil} className="px-4 py-2 rounded-lg text-sm text-slate-500 border border-slate-200 hover:border-slate-400 font-sans mt-5">
                 ↺ Ny søgning
               </button>
             )}
             {antalGemte > 0 && trin === "resultater" && (
               <button onClick={() => setVisKunGemte(v => !v)}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold border font-sans ${visKunGemte ? "bg-amber-100 border-amber-300 text-amber-700" : "border-slate-200 text-slate-600"}`}>
+                className={`px-4 py-2 rounded-lg text-sm font-semibold border font-sans mt-5 ${visKunGemte ? "bg-amber-100 border-amber-300 text-amber-700" : "border-slate-200 text-slate-600"}`}>
                 ★ {visKunGemte ? "Vis alle" : `Gemte (${antalGemte})`}
               </button>
             )}
@@ -539,7 +566,7 @@ export default function Page() {
             <div className="text-5xl mb-4">⚖️</div>
             <h2 className="text-xl font-semibold text-slate-700 mb-2">Klar til at søge</h2>
             <p className="text-slate-400 text-sm max-w-sm mx-auto leading-relaxed font-sans">
-              Søg på ord, lovbestemmelser eller paragraffer for at få et overblik over relevante afgørelser — eller hent de nyeste uden søgeord.
+              Søg på emner eller lovbestemmelser, beskriv din konkrete sag for bedre resultater, eller klik Søg uden tekst for de nyeste afgørelser.
             </p>
           </div>
         )}
@@ -560,9 +587,14 @@ export default function Page() {
 
         {/* Trin 1: Overblik */}
         {!loading && trin === "overblik" && overblik && (
-          <OverblikPanel overblik={overblik} onAnalyser={analyser}
-          onHentFlere={hentFlere} onHentAlle={hentAlle}
-          loadingFlere={loadingFlere} loadingAlle={loadingAlle} />
+          <OverblikPanel
+            overblik={overblik}
+            onAnalyser={analyser}
+            onHentFlere={hentFlere}
+            onHentAlle={hentAlle}
+            loadingFlere={loadingFlere}
+            loadingAlle={loadingAlle}
+          />
         )}
 
         {/* Trin 2: Resultater */}
@@ -572,14 +604,15 @@ export default function Page() {
               <div className="text-center py-20">
                 <div className="text-4xl mb-3">🔍</div>
                 <p className="text-slate-600 font-medium">Ingen afgørelser fundet</p>
-                <p className="text-slate-400 text-sm mt-1 font-sans">Prøv en anden periode eller søgeterm</p>
+                <p className="text-slate-400 text-sm mt-1 font-sans">Prøv en anden søgning</p>
               </div>
             ) : (
               <>
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-sm text-slate-500 font-sans">
-                    {søgeTekst ? `"${søgeTekst}"` : valgtPeriode}
+                    {søgeTekst ? `"${søgeTekst}"` : "Nyeste afgørelser"}
                     {valgtSagstype !== "Alle" && ` · ${valgtSagstype}`}
+                    {visKunGemte && " · Gemte"}
                   </p>
                   <div className="flex items-center gap-3 text-xs text-slate-400 font-sans">
                     <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" />Høj</span>
@@ -598,7 +631,7 @@ export default function Page() {
                 </div>
                 {søgeTekst && (
                   <button onClick={() => setTrin("overblik")}
-                    className="mt-4 w-full py-2.5 rounded-xl text-sm text-slate-500 border border-slate-200 hover:border-slate-400 font-sans">
+                    className="mt-4 w-full py-2.5 rounded-xl text-sm text-slate-500 border border-slate-200 hover:border-slate-400 font-sans transition-colors">
                     ← Tilbage til overblik og vælg flere afgørelser
                   </button>
                 )}
