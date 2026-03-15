@@ -7,6 +7,47 @@ const hitsCache = new Map();
 function rydCache() {
   for (const [k] of hitsCache) {
     if (parseInt(k) < Date.now() - 30 * 60 * 1000) hitsCache.delete(k);
+    const { resultater: nye, totalCount } = await hentSider(st, cr, fraPage, tilPage);
+    console.log(`HentFlere: ${nye.length} nye afgørelser (side ${fraPage}-${tilPage})`);
+
+    const eksisterendeIds = new Set(eksisterende.map(r => r.FullName));
+    const unikkeNye = nye.filter(r => !eksisterendeIds.has(r.FullName));
+    const alleResultater = [...eksisterende, ...unikkeNye];
+
+    // Hent fuld tekst for top 50 af de nye
+    const nyeTop50 = unikkeNye.slice(0, 50);
+    const nyeRest = unikkeNye.slice(50);
+
+    const nyeKandidaterMedTekst = await Promise.all(nyeTop50.map(async (r, i) => ({
+      i: eksisterende.length + i,
+      id: r.FullName,
+      dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
+      snippet: await hentOverbliksresumé(r, st),
+    })));
+
+    const nyeKandidaterRest = nyeRest.map((r, i) => ({
+      i: eksisterende.length + 50 + i,
+      id: r.FullName,
+      dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
+      snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400),
+    }));
+
+    const nyeKandidater = [...nyeKandidaterMedTekst, ...nyeKandidaterRest];
+
+    const grupper = nyeKandidater.length > 0
+      ? await grupperMedClaude(nyeKandidater, st, sagsbeskrivelse)
+      : { grupper: [] };
+
+    hitsCache.set(cacheId, { resultater: alleResultater, søgeTekst: st, criteria: cr, sideSidst: tilPage });
+
+    return Response.json({
+      grupper: grupper?.grupper || [],
+      hits: nyeKandidater,
+      nyeCount: unikkeNye.length,
+      totalCount: alleResultater.length,
+      databaseTotal: totalCount,
+      harFlere: totalCount > alleResultater.length,
+    });
   }
 }
 
@@ -98,7 +139,27 @@ async function claudeJSON(prompt, maxTokens = 1500) {
   try { return JSON.parse(raw.replace(/```json|```/g, "").trim()); } catch { return null; }
 }
 
-async function grupperMedClaude(kandidater, søgeTekst, sagsbeskrivelse) {
+async function hentOverbliksresumé(r, søgeTekst) {
+  const tekst = await hentDokumentTekst(r.HiveId, r.FullName);
+  if (!tekst) return (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400);
+
+  const resumé = await claudeJSON(`Du er skatteadvokat. Søgning: "${søgeTekst}"
+
+Læs denne afgørelse og skriv ET kort resumé på 2-3 sætninger der beskriver:
+1. Hvad sagen handler om
+2. Hvad afgørelsen konkret siger om "${søgeTekst}"
+3. Udfaldet (medhold/stadfæstelse/hjemvisning)
+
+Afgørelsestekst:
+${tekst.slice(0, 2000)}
+
+Returner KUN dette JSON:
+{"resumé": "2-3 sætninger"}`, 300);
+
+  return resumé?.resumé || tekst.slice(0, 400);
+}
+
+
   const sagskontekst = sagsbeskrivelse
     ? `\n\nAdvokatens sagsbeskrivelse: "${sagsbeskrivelse}"\nBrug denne til at prioritere afgørelser der er relevante for netop denne sag.`
     : "";
