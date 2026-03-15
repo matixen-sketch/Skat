@@ -125,14 +125,23 @@ function OverblikPanel({ overblik, onAnalyser, onHentFlere, onHentAlle, loadingF
                 const anbefalet = g.anbefalede?.includes(i);
                 return (
                   <label key={i} className={`flex items-start gap-3 px-5 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors ${valgte[i] ? "bg-amber-50/40" : ""}`}>
-                    <input type="checkbox" checked={!!valgte[i]} onChange={() => toggleIndeks(i)} className="mt-0.5" />
+                    <input type="checkbox" checked={!!valgte[i]} onChange={() => toggleIndeks(i)} className="mt-0.5 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
                         <span className="font-mono text-xs text-slate-400">{hit.id}</span>
                         <span className="text-xs text-slate-400 font-sans">{hit.dato}</span>
                         {anbefalet && <Tag color="bg-amber-100 text-amber-600">★ Anbefalet</Tag>}
                       </div>
-                      {hit.snippet && <p className="text-xs text-slate-500 font-sans mt-0.5 line-clamp-2">{hit.snippet}</p>}
+                      {hit.snippet && (
+                        <p
+                          className="text-xs text-slate-600 font-sans leading-relaxed line-clamp-3"
+                          dangerouslySetInnerHTML={{
+                            __html: hit.snippet
+                              .replace(/<em>/g, '<mark class="bg-amber-100 text-amber-800 rounded px-0.5 not-italic font-medium">')
+                              .replace(/<\/em>/g, '</mark>')
+                          }}
+                        />
+                      )}
                     </div>
                   </label>
                 );
