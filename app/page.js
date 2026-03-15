@@ -44,7 +44,7 @@ function Section({ titel, ikon, fremhæv, children }) {
 function OverblikPanel({ overblik, onAnalyser, onHentFlere, onHentAlle, loadingFlere, loadingAlle }) {
   const [valgte, setValgte] = useState(() => {
     const init = {};
-    overblik.grupper.forEach(g => g.anbefalede?.forEach(i => { init[i] = true; }));
+    (overblik.grupper || []).forEach(g => (g.anbefalede || []).forEach(i => { init[i] = true; }));
     return init;
   });
 
