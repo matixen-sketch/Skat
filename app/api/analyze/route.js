@@ -78,7 +78,13 @@ ${liste}
 }`);
 }
 
+function søgeTekstTilTerms(søgeTekst) {
+  // Split på mellemrum men behold § sammen med efterfølgende tegn
+  return søgeTekst.trim().split(/\s+/).filter(Boolean);
+}
+
 async function hentAlleHits(søgeTekst, criteria) {
+  const terms = søgeTekstTilTerms(søgeTekst);
   const sider = [1, 2, 3, 4, 5];
   const alleResultater = [];
   await Promise.all(sider.map(async (page) => {
@@ -88,11 +94,12 @@ async function hentAlleHits(søgeTekst, criteria) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fieldSetName: "SearchResultFields",
-          criteria,
+          criteria: { ...criteria, terms },
           ordering: { descending: true, fieldName: "Relevans" },
-          page, skip: (page - 1) * 20,
-          slices: false, snippets: true, take: 20,
-          query: søgeTekst,
+          page, skip: (page - 1) * 15,
+          slices: false, snippets: true,
+          portalColumnHighlights: null,
+          take: 15,
         }),
       });
       const d = await r.json();
