@@ -11,11 +11,11 @@ function rydCache() {
 }
 
 function søgeTilTerms(tekst) {
-  const trimmet = tekst.trim()
-    .replace(/^[""]|[""]$/g, "") // Fjern eventuelle anførselstegn brugeren selv har skrevet
-    .replace(/§/g, "") // Fjern §-tegn da API'et ignorerer det
-    .replace(/\s+/g, " ").trim();
-  return trimmet ? [trimmet] : [];
+  return tekst
+    .trim()
+    .replace(/^[""]|[""]$/g, "") // Fjern anførselstegn brugeren måske har skrevet
+    .split(/\s+/)
+    .filter(Boolean);
 }
 
 async function søgSide(terms, criteria, page) {
@@ -105,11 +105,13 @@ async function grupperMedClaude(kandidater, søgeTekst, sagsbeskrivelse) {
 
   return claudeJSON(`Du er erfaren dansk skatteadvokat. Søgning: "${søgeTekst}"${sagskontekst}
 
-Analyser disse ${kandidater.length} afgørelser og gruppér dem i 4-7 juridiske temagrupper.
+Analyser disse ${kandidater.length} afgørelser og FRASORTER alle der ikke direkte og specifikt handler om søgningen "${søgeTekst}". Medtag KUN afgørelser hvor snippets tydeligt viser at afgørelsen omhandler dette emne.
+
+Gruppér de relevante afgørelser i 3-6 juridiske temagrupper.
 
 ${kandidater.map(k => `[${k.i}] ${k.id} | ${k.dato} | ${k.snippet}`).join("\n")}
 
-Returner KUN dette JSON. "anbefalede" er de mest relevante/præjudikatsværdige afgørelser. "anbefaletBegrundelse" forklarer kortfattet hvorfor de er fremhævet:
+Returner KUN dette JSON. "anbefalede" er de mest relevante/præjudikatsværdige. "anbefaletBegrundelse" forklarer kortfattet hvorfor:
 {
   "grupper": [
     {
@@ -190,7 +192,7 @@ export async function POST(req) {
     const kandidater = resultater.map((r, i) => ({
       i, id: r.FullName,
       dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
-      snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" ").slice(0, 300),
+      snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400),
     }));
 
     const grupper = await grupperMedClaude(kandidater, søgeTekst, sagsbeskrivelse);
@@ -232,7 +234,7 @@ export async function POST(req) {
       i: eksisterende.length + i,
       id: r.FullName,
       dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
-      snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" ").slice(0, 300),
+              snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400),
     }));
 
     const grupper = nyeKandidater.length > 0
