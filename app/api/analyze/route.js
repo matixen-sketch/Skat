@@ -11,7 +11,11 @@ function rydCache() {
 }
 
 function søgeTilTerms(tekst) {
-  return tekst.trim().split(/\s+/).filter(Boolean);
+  const trimmet = tekst.trim()
+    .replace(/^[""]|[""]$/g, "") // Fjern eventuelle anførselstegn brugeren selv har skrevet
+    .replace(/§/g, "") // Fjern §-tegn da API'et ignorerer det
+    .replace(/\s+/g, " ").trim();
+  return trimmet ? [trimmet] : [];
 }
 
 async function søgSide(terms, criteria, page) {
