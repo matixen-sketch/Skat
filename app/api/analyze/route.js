@@ -37,6 +37,49 @@ async function claudeJSON(prompt, maxTokens = 1500) {
   try { return JSON.parse(raw.replace(/```json|```/g, "").trim()); } catch { return null; }
 }
 
+function søgeTilTerms(tekst) {
+  return tekst.trim().split(/\s+/).filter(Boolean);
+}
+
+async function søgSide(terms, criteria, page) {
+  const res = await fetch(`${BASE_URL}/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fieldSetName: "SearchResultFields",
+      criteria: { status: ["Effective"], ...criteria, terms },
+      ordering: { fieldName: "Relevans", descending: true },
+      page,
+      skip: (page - 1) * 15,
+      slices: false,
+      snippets: true,
+      portalColumnHighlights: null,
+      take: 15,
+    }),
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data.Results) ? data.Results : [];
+}
+
+async function hentAlleHits(søgeTekst, criteria) {
+  const terms = søgeTilTerms(søgeTekst);
+  // Hent 5 sider sekventielt for at undgå at de returnerer samme resultater
+  const alleResultater = [];
+  for (let page = 1; page <= 5; page++) {
+    const resultater = await søgSide(terms, criteria, page);
+    alleResultater.push(...resultater);
+    if (resultater.length < 15) break; // Ingen flere sider
+  }
+  // Deduplikér på FullName
+  const set = new Set();
+  return alleResultater.filter(r => {
+    if (set.has(r.FullName)) return false;
+    set.add(r.FullName);
+    return true;
+  });
+}
+
 async function analyserAfgørelse(afgørelse, tekst) {
   return claudeJSON(`Du er en erfaren dansk skatteretsadvokat. Analyser denne Landsskatteretsafgørelse og returner KUN et JSON-objekt uden markdown.
 
@@ -78,58 +121,40 @@ ${liste}
 }`);
 }
 
-function søgeTekstTilTerms(søgeTekst) {
-  // Split på mellemrum men behold § sammen med efterfølgende tegn
-  return søgeTekst.trim().split(/\s+/).filter(Boolean);
-}
-
-async function hentAlleHits(søgeTekst, criteria) {
-  const terms = søgeTekstTilTerms(søgeTekst);
-  const sider = [1, 2, 3, 4, 5];
-  const alleResultater = [];
-  await Promise.all(sider.map(async (page) => {
-    try {
-      const r = await fetch(`${BASE_URL}/search`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fieldSetName: "SearchResultFields",
-          criteria: { ...criteria, terms },
-          ordering: { descending: true, fieldName: "Relevans" },
-          page, skip: (page - 1) * 15,
-          slices: false, snippets: true,
-          portalColumnHighlights: null,
-          take: 15,
-        }),
-      });
-      const d = await r.json();
-      if (Array.isArray(d.Results)) alleResultater.push(...d.Results);
-    } catch {}
-  }));
-  return alleResultater;
-}
-
 export async function POST(req) {
   const { handling, periode, søgeTekst, sagstype, valgteIndeks, alleHits } = await req.json();
   const criteria = {};
   if (sagstype && sagstype !== "Alle") criteria.verdict = [sagstype];
 
-  // ── TRIN 1: Hent overblik og grupper ──────────────────────────────
-  if (handling === "overblik") {
-    const resultater = await hentAlleHits(søgeTekst, criteria);
-    if (resultater.length === 0) return Response.json({ grupper: [], hits: [], totalCount: 0 });
+  // ── RELATEREDE ────────────────────────────────────────────────────
+  if (handling === "relaterede" && søgeTekst) {
+    const resultater = await søgSide(søgeTilTerms(søgeTekst), {}, 1);
+    return Response.json(resultater.slice(0, 6).map(r => ({
+      id: r.FullName,
+      titel: r.title,
+      dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" }),
+      url: `https://afgoerelsesdatabasen.dk/h/${r.HiveId}/${r.FullName}?showExact=true`,
+    })));
+  }
 
-    const kandidater = resultater.slice(0, 100).map((r, i) => ({
+  // ── TRIN 1: OVERBLIK ─────────────────────────────────────────────
+  if (handling === "overblik" && søgeTekst) {
+    const alleResultater = await hentAlleHits(søgeTekst, criteria);
+    console.log(`Fandt ${alleResultater.length} unikke afgørelser for "${søgeTekst}"`);
+
+    if (alleResultater.length === 0) return Response.json({ grupper: [], hits: [], totalCount: 0, alleRawHits: [] });
+
+    const kandidater = alleResultater.slice(0, 100).map((r, i) => ({
       i,
       id: r.FullName,
       dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
       år: new Date(r.date_release || r.date_created).getFullYear(),
-      snippet: (r.Snippets || []).join(" ").slice(0, 250),
+      snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" ").slice(0, 300),
     }));
 
     const grupper = await claudeJSON(`Du er erfaren dansk skatteadvokat. Søgning: "${søgeTekst}"
 
-Analyser disse ${kandidater.length} afgørelser og gruppér dem i 4-7 juridiske temagrupper baseret på deres indhold.
+Analyser disse ${kandidater.length} afgørelser og gruppér dem i 4-7 juridiske temagrupper.
 
 ${kandidater.map(k => `[${k.i}] ${k.id} | ${k.dato} | ${k.snippet}`).join("\n")}
 
@@ -137,8 +162,8 @@ Returner KUN dette JSON:
 {
   "grupper": [
     {
-      "navn": "Kort beskrivende gruppenavn",
-      "beskrivelse": "1-2 sætninger om hvad afgørelserne i gruppen handler om",
+      "navn": "Kort gruppenavn",
+      "beskrivelse": "1-2 sætninger om hvad afgørelserne handler om",
       "indeks": [0, 3, 7],
       "årsSpænd": "2012–2024",
       "anbefalede": [0, 3]
@@ -149,12 +174,12 @@ Returner KUN dette JSON:
     return Response.json({
       grupper: grupper?.grupper || [],
       hits: kandidater,
-      totalCount: resultater.length,
-      alleRawHits: resultater,
+      totalCount: alleResultater.length,
+      alleRawHits: alleResultater,
     });
   }
 
-  // ── TRIN 2: Analyser valgte afgørelser ────────────────────────────
+  // ── TRIN 2: ANALYSER VALGTE ───────────────────────────────────────
   if (handling === "analyser" && Array.isArray(valgteIndeks) && Array.isArray(alleHits)) {
     const valgte = valgteIndeks.map(i => alleHits[i]).filter(Boolean).slice(0, 8);
     if (valgte.length === 0) return Response.json({ afgørelser: [], sammendrag: null });
@@ -163,13 +188,11 @@ Returner KUN dette JSON:
       const dato = new Date(r.date_release || r.date_created)
         .toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" });
       const base = {
-        id: r.FullName || r.title,
-        dato, titel: r.title || r.FullName,
+        id: r.FullName || r.title, dato, titel: r.title || r.FullName,
         instans: "Landsskatteretten", område: "Landsskatteretten",
         sagstype: "Afgørelse", resumé: "", afgørelse: "",
         praksisvurdering: "", lovhenvisninger: [], nøgleord: [],
-        handlingspunkter: [], relevans: "middel",
-        klientrelevans_spørgsmål: "",
+        handlingspunkter: [], relevans: "middel", klientrelevans_spørgsmål: "",
         url: `https://afgoerelsesdatabasen.dk/h/${r.HiveId}/${r.FullName}?showExact=true`,
       };
       const tekst = r.DocumentInfoUrl ? await hentDokumentTekst(r.DocumentInfoUrl) : "";
@@ -189,9 +212,10 @@ Returner KUN dette JSON:
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       fieldSetName: "SearchResultFields",
-      criteria,
+      criteria: { status: ["Effective"], ...criteria },
       ordering: { descending: true, fieldName: "date_release" },
-      page: 1, skip: 0, slices: false, snippets: false, take: 10,
+      page: 1, skip: 0, slices: false, snippets: false,
+      portalColumnHighlights: null, take: 10,
     }),
   });
   if (!searchRes.ok) return Response.json({ error: "Søgning fejlede" }, { status: 500 });
