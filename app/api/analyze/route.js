@@ -191,10 +191,11 @@ function byggKandidater(resultater, startIndeks, søgeTekst) {
 }
 
 async function byggKandidaterMedTekst(resultater, startIndeks, søgeTekst) {
-  const top50 = resultater.slice(0, 50);
-  const resten = resultater.slice(50);
+  // Kun top 10 får fuld tekst for at undgå timeout
+  const top10 = resultater.slice(0, 10);
+  const resten = resultater.slice(10);
 
-  const medTekst = await Promise.all(top50.map(async (r, i) => ({
+  const medTekst = await Promise.all(top10.map(async (r, i) => ({
     i: startIndeks + i,
     id: r.FullName,
     dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
@@ -202,7 +203,7 @@ async function byggKandidaterMedTekst(resultater, startIndeks, søgeTekst) {
   })));
 
   const udenTekst = resten.map((r, i) => ({
-    i: startIndeks + 50 + i,
+    i: startIndeks + 10 + i,
     id: r.FullName,
     dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
     snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400),
@@ -216,7 +217,17 @@ export async function POST(req) {
   const { handling, søgeTekst, sagstype, sagsbeskrivelse, valgteIndeks, cacheId } = body;
   const criteria = sagstype && sagstype !== "Alle" ? { verdict: [sagstype] } : {};
 
-  // ── RELATEREDE ────────────────────────────────────────────────────
+  // ── HENT ENKELT RESUMÉ ───────────────────────────────────────────
+  if (handling === "hentResumé" && cacheId) {
+    const cached = hitsCache.get(cacheId);
+    if (!cached) return Response.json({ error: "Cache udløbet" }, { status: 400 });
+    const r = cached.resultater[body.indeks];
+    if (!r) return Response.json({ error: "Ikke fundet" }, { status: 404 });
+    const resumé = await hentOverbliksresumé(r, cached.søgeTekst);
+    return Response.json({ resumé });
+  }
+
+
   if (handling === "relaterede" && søgeTekst) {
     const { resultater } = await hentSider(søgeTekst, {}, 1, 1);
     return Response.json(resultater.slice(0, 6).map(r => ({
