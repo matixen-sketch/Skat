@@ -41,7 +41,59 @@ function Section({ titel, ikon, fremhæv, children }) {
 }
 
 // ── Overblik panel ────────────────────────────────────────────────────
-function OverblikPanel({ overblik, onAnalyser, onHentFlere, onHentAlle, loadingFlere, loadingAlle }) {
+function OverblikHit({ hit, valgt, anbefalet, onToggle, cacheId }) {
+  const [resumé, setResumé] = useState(hit.snippet);
+  const [henterResumé, setHenterResumé] = useState(false);
+  const [fuldt, setFuldt] = useState(false);
+
+  const hentResumé = async () => {
+    setHenterResumé(true);
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ handling: "hentResumé", cacheId, indeks: hit.i }),
+      });
+      const data = await res.json();
+      if (data.resumé) { setResumé(data.resumé); setFuldt(true); }
+    } catch {}
+    setHenterResumé(false);
+  };
+
+  return (
+    <label className={`flex items-start gap-3 px-5 py-3 cursor-pointer hover:bg-slate-50 transition-colors ${valgt ? "bg-amber-50/40" : ""}`}>
+      <input type="checkbox" checked={valgt} onChange={onToggle} className="mt-0.5 flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap mb-1">
+          <span className="font-mono text-xs text-slate-400">{hit.id}</span>
+          <span className="text-xs text-slate-400 font-sans">{hit.dato}</span>
+          {anbefalet && <Tag color="bg-amber-100 text-amber-600">★ Anbefalet</Tag>}
+          {fuldt && <Tag color="bg-green-100 text-green-600">AI resumé</Tag>}
+        </div>
+        {resumé && (
+          <p
+            className={`text-xs text-slate-600 font-sans leading-relaxed ${fuldt ? "" : "line-clamp-3"}`}
+            dangerouslySetInnerHTML={{
+              __html: resumé
+                .replace(/<em>/g, '<mark class="bg-amber-100 text-amber-800 rounded px-0.5 not-italic font-medium">')
+                .replace(/<\/em>/g, '</mark>')
+            }}
+          />
+        )}
+        {!fuldt && (
+          <button
+            onClick={e => { e.preventDefault(); hentResumé(); }}
+            disabled={henterResumé}
+            className="mt-1.5 text-xs text-blue-500 hover:text-blue-700 font-sans flex items-center gap-1 disabled:opacity-50">
+            {henterResumé
+              ? <><span className="w-3 h-3 border border-blue-300 border-t-blue-600 rounded-full animate-spin inline-block" />Henter resumé…</>
+              : "↓ Hent AI resumé"}
+          </button>
+        )}
+      </div>
+    </label>
+  );
+}
   const [valgte, setValgte] = useState(() => {
     const init = {};
     (overblik.grupper || []).forEach(g => (g.anbefalede || []).forEach(i => { init[i] = true; }));
@@ -124,26 +176,14 @@ function OverblikPanel({ overblik, onAnalyser, onHentFlere, onHentAlle, loadingF
                 if (!hit) return null;
                 const anbefalet = g.anbefalede?.includes(i);
                 return (
-                  <label key={i} className={`flex items-start gap-3 px-5 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors ${valgte[i] ? "bg-amber-50/40" : ""}`}>
-                    <input type="checkbox" checked={!!valgte[i]} onChange={() => toggleIndeks(i)} className="mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="font-mono text-xs text-slate-400">{hit.id}</span>
-                        <span className="text-xs text-slate-400 font-sans">{hit.dato}</span>
-                        {anbefalet && <Tag color="bg-amber-100 text-amber-600">★ Anbefalet</Tag>}
-                      </div>
-                      {hit.snippet && (
-                        <p
-                          className="text-xs text-slate-600 font-sans leading-relaxed line-clamp-3"
-                          dangerouslySetInnerHTML={{
-                            __html: hit.snippet
-                              .replace(/<em>/g, '<mark class="bg-amber-100 text-amber-800 rounded px-0.5 not-italic font-medium">')
-                              .replace(/<\/em>/g, '</mark>')
-                          }}
-                        />
-                      )}
-                    </div>
-                  </label>
+                  <OverblikHit
+                    key={i}
+                    hit={hit}
+                    valgt={!!valgte[i]}
+                    anbefalet={anbefalet}
+                    onToggle={() => toggleIndeks(i)}
+                    cacheId={cacheId}
+                  />
                 );
               })}
             </div>
@@ -598,6 +638,7 @@ export default function Page() {
         {!loading && trin === "overblik" && overblik && (
           <OverblikPanel
             overblik={overblik}
+            cacheId={cacheId}
             onAnalyser={analyser}
             onHentFlere={hentFlere}
             onHentAlle={hentAlle}
