@@ -7,54 +7,13 @@ const hitsCache = new Map();
 function rydCache() {
   for (const [k] of hitsCache) {
     if (parseInt(k) < Date.now() - 30 * 60 * 1000) hitsCache.delete(k);
-    const { resultater: nye, totalCount } = await hentSider(st, cr, fraPage, tilPage);
-    console.log(`HentFlere: ${nye.length} nye afgørelser (side ${fraPage}-${tilPage})`);
-
-    const eksisterendeIds = new Set(eksisterende.map(r => r.FullName));
-    const unikkeNye = nye.filter(r => !eksisterendeIds.has(r.FullName));
-    const alleResultater = [...eksisterende, ...unikkeNye];
-
-    // Hent fuld tekst for top 50 af de nye
-    const nyeTop50 = unikkeNye.slice(0, 50);
-    const nyeRest = unikkeNye.slice(50);
-
-    const nyeKandidaterMedTekst = await Promise.all(nyeTop50.map(async (r, i) => ({
-      i: eksisterende.length + i,
-      id: r.FullName,
-      dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
-      snippet: await hentOverbliksresumé(r, st),
-    })));
-
-    const nyeKandidaterRest = nyeRest.map((r, i) => ({
-      i: eksisterende.length + 50 + i,
-      id: r.FullName,
-      dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
-      snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400),
-    }));
-
-    const nyeKandidater = [...nyeKandidaterMedTekst, ...nyeKandidaterRest];
-
-    const grupper = nyeKandidater.length > 0
-      ? await grupperMedClaude(nyeKandidater, st, sagsbeskrivelse)
-      : { grupper: [] };
-
-    hitsCache.set(cacheId, { resultater: alleResultater, søgeTekst: st, criteria: cr, sideSidst: tilPage });
-
-    return Response.json({
-      grupper: grupper?.grupper || [],
-      hits: nyeKandidater,
-      nyeCount: unikkeNye.length,
-      totalCount: alleResultater.length,
-      databaseTotal: totalCount,
-      harFlere: totalCount > alleResultater.length,
-    });
   }
 }
 
 function søgeTilTerms(tekst) {
   return tekst
     .trim()
-    .replace(/^[""]|[""]$/g, "") // Fjern anførselstegn brugeren måske har skrevet
+    .replace(/^[""]|[""]$/g, "")
     .split(/\s+/)
     .filter(Boolean);
 }
@@ -93,7 +52,6 @@ async function hentSider(søgeTekst, criteria, fraPage, tilPage) {
     alleResultater.push(...resultater);
     if (resultater.length < 15) break;
   }
-  // Deduplikér
   const set = new Set();
   return {
     resultater: alleResultater.filter(r => {
@@ -111,11 +69,10 @@ async function hentDokumentTekst(hiveId, fullName) {
     const res = await fetch(url);
     if (!res.ok) return "";
     const html = await res.text();
-    // Strip HTML tags og normaliser whitespace
     return html
       .replace(/<[^>]+>/g, " ")
       .replace(/&amp;/g, "&").replace(/&nbsp;/g, " ")
-      .replace(/&#\d+;/g, c => String.fromCharCode(parseInt(c.match(/\d+/)[0])))
+      .replace(/&#(\d+);/g, (_, c) => String.fromCharCode(parseInt(c)))
       .replace(/\s+/g, " ").trim();
   } catch { return ""; }
 }
@@ -142,7 +99,6 @@ async function claudeJSON(prompt, maxTokens = 1500) {
 async function hentOverbliksresumé(r, søgeTekst) {
   const tekst = await hentDokumentTekst(r.HiveId, r.FullName);
   if (!tekst) return (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400);
-
   const resumé = await claudeJSON(`Du er skatteadvokat. Søgning: "${søgeTekst}"
 
 Læs denne afgørelse og skriv ET kort resumé på 2-3 sætninger der beskriver:
@@ -155,24 +111,22 @@ ${tekst.slice(0, 2000)}
 
 Returner KUN dette JSON:
 {"resumé": "2-3 sætninger"}`, 300);
-
-  return resumé?.resumé || tekst.slice(0, 400);
+  return resumé?.resumé || (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400);
 }
 
-
+async function grupperMedClaude(kandidater, søgeTekst, sagsbeskrivelse) {
   const sagskontekst = sagsbeskrivelse
     ? `\n\nAdvokatens sagsbeskrivelse: "${sagsbeskrivelse}"\nBrug denne til at prioritere afgørelser der er relevante for netop denne sag.`
     : "";
-
   return claudeJSON(`Du er erfaren dansk skatteadvokat. Søgning: "${søgeTekst}"${sagskontekst}
 
-Analyser disse ${kandidater.length} afgørelser og FRASORTER alle der ikke direkte og specifikt handler om søgningen "${søgeTekst}". Medtag KUN afgørelser hvor snippets tydeligt viser at afgørelsen omhandler dette emne.
+Analyser disse ${kandidater.length} afgørelser og FRASORTER alle der ikke direkte og specifikt handler om søgningen "${søgeTekst}". Medtag KUN afgørelser hvor resuméet tydeligt viser at afgørelsen omhandler dette emne.
 
 Gruppér de relevante afgørelser i 3-6 juridiske temagrupper.
 
 ${kandidater.map(k => `[${k.i}] ${k.id} | ${k.dato} | ${k.snippet}`).join("\n")}
 
-Returner KUN dette JSON. "anbefalede" er de mest relevante/præjudikatsværdige. "anbefaletBegrundelse" forklarer kortfattet hvorfor:
+Returner KUN dette JSON:
 {
   "grupper": [
     {
@@ -227,6 +181,36 @@ ${liste}
 }`);
 }
 
+function byggKandidater(resultater, startIndeks, søgeTekst) {
+  return resultater.map((r, i) => ({
+    i: startIndeks + i,
+    id: r.FullName,
+    dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
+    snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400),
+  }));
+}
+
+async function byggKandidaterMedTekst(resultater, startIndeks, søgeTekst) {
+  const top50 = resultater.slice(0, 50);
+  const resten = resultater.slice(50);
+
+  const medTekst = await Promise.all(top50.map(async (r, i) => ({
+    i: startIndeks + i,
+    id: r.FullName,
+    dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
+    snippet: await hentOverbliksresumé(r, søgeTekst),
+  })));
+
+  const udenTekst = resten.map((r, i) => ({
+    i: startIndeks + 50 + i,
+    id: r.FullName,
+    dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
+    snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400),
+  }));
+
+  return [...medTekst, ...udenTekst];
+}
+
 export async function POST(req) {
   const body = await req.json();
   const { handling, søgeTekst, sagstype, sagsbeskrivelse, valgteIndeks, cacheId } = body;
@@ -243,24 +227,21 @@ export async function POST(req) {
     })));
   }
 
-  // ── OVERBLIK (første 10 sider = ~150 afgørelser) ──────────────────
-  if (handling === "overblik" && søgeTekst) {
-    const { resultater, totalCount } = await hentSider(søgeTekst, criteria, 1, 10);
-    console.log(`Overblik: ${resultater.length} afgørelser hentet, total: ${totalCount}`);
+  // ── OVERBLIK ─────────────────────────────────────────────────────
+  if (handling === "overblik" && (søgeTekst || sagsbeskrivelse)) {
+    const { resultater, totalCount } = await hentSider(søgeTekst || sagsbeskrivelse, criteria, 1, 10);
+    console.log(`Overblik: ${resultater.length} afgørelser, total: ${totalCount}`);
 
-    if (resultater.length === 0) return Response.json({ grupper: [], hits: [], totalCount: 0, cacheId: null, harFlere: false, næsteSide: null });
+    if (resultater.length === 0) {
+      return Response.json({ grupper: [], hits: [], totalCount: 0, databaseTotal: 0, cacheId: null, harFlere: false });
+    }
 
-    const kandidater = resultater.map((r, i) => ({
-      i, id: r.FullName,
-      dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
-      snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400),
-    }));
-
-    const grupper = await grupperMedClaude(kandidater, søgeTekst, sagsbeskrivelse);
+    const kandidater = await byggKandidaterMedTekst(resultater, 0, søgeTekst || sagsbeskrivelse);
+    const grupper = await grupperMedClaude(kandidater, søgeTekst || sagsbeskrivelse, sagsbeskrivelse);
 
     rydCache();
     const nyCacheId = Date.now().toString();
-    hitsCache.set(nyCacheId, { resultater, søgeTekst, criteria, sideSidst: 10 });
+    hitsCache.set(nyCacheId, { resultater, søgeTekst: søgeTekst || sagsbeskrivelse, criteria, sideSidst: 10 });
 
     return Response.json({
       grupper: grupper?.grupper || [],
@@ -269,41 +250,25 @@ export async function POST(req) {
       databaseTotal: totalCount,
       cacheId: nyCacheId,
       harFlere: totalCount > resultater.length,
-      næsteSide: 11,
     });
   }
 
-  // ── HENT FLERE (næste 10 sider) ───────────────────────────────────
+  // ── HENT FLERE ────────────────────────────────────────────────────
   if (handling === "hentFlere" && cacheId) {
     const cached = hitsCache.get(cacheId);
     if (!cached) return Response.json({ error: "Cache udløbet — søg igen" }, { status: 400 });
 
     const { resultater: eksisterende, søgeTekst: st, criteria: cr, sideSidst } = cached;
-    const fraPage = sideSidst + 1;
-    const tilPage = sideSidst + 10;
+    const { resultater: nye, totalCount } = await hentSider(st, cr, sideSidst + 1, sideSidst + 10);
 
-    const { resultater: nye, totalCount } = await hentSider(st, cr, fraPage, tilPage);
-    console.log(`HentFlere: ${nye.length} nye afgørelser (side ${fraPage}-${tilPage})`);
-
-    // Deduplikér mod eksisterende
     const eksisterendeIds = new Set(eksisterende.map(r => r.FullName));
     const unikkeNye = nye.filter(r => !eksisterendeIds.has(r.FullName));
     const alleResultater = [...eksisterende, ...unikkeNye];
 
-    // Grupper kun de nye
-    const nyeKandidater = unikkeNye.map((r, i) => ({
-      i: eksisterende.length + i,
-      id: r.FullName,
-      dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
-              snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400),
-    }));
+    const nyeKandidater = await byggKandidaterMedTekst(unikkeNye, eksisterende.length, st);
+    const grupper = nyeKandidater.length > 0 ? await grupperMedClaude(nyeKandidater, st, sagsbeskrivelse) : { grupper: [] };
 
-    const grupper = nyeKandidater.length > 0
-      ? await grupperMedClaude(nyeKandidater, st, sagsbeskrivelse)
-      : { grupper: [] };
-
-    // Opdater cache
-    hitsCache.set(cacheId, { resultater: alleResultater, søgeTekst: st, criteria: cr, sideSidst: tilPage });
+    hitsCache.set(cacheId, { resultater: alleResultater, søgeTekst: st, criteria: cr, sideSidst: sideSidst + 10 });
 
     return Response.json({
       grupper: grupper?.grupper || [],
@@ -312,33 +277,23 @@ export async function POST(req) {
       totalCount: alleResultater.length,
       databaseTotal: totalCount,
       harFlere: totalCount > alleResultater.length,
-      næsteSide: tilPage + 1,
     });
   }
 
-  // ── HENT ALLE (alle resterende sider) ────────────────────────────
+  // ── HENT ALLE ─────────────────────────────────────────────────────
   if (handling === "hentAlle" && cacheId) {
     const cached = hitsCache.get(cacheId);
     if (!cached) return Response.json({ error: "Cache udløbet — søg igen" }, { status: 400 });
 
     const { resultater: eksisterende, søgeTekst: st, criteria: cr, sideSidst } = cached;
     const { resultater: nye, totalCount } = await hentSider(st, cr, sideSidst + 1, 999);
-    console.log(`HentAlle: ${nye.length} nye afgørelser hentet`);
 
     const eksisterendeIds = new Set(eksisterende.map(r => r.FullName));
     const unikkeNye = nye.filter(r => !eksisterendeIds.has(r.FullName));
     const alleResultater = [...eksisterende, ...unikkeNye];
 
-    const nyeKandidater = unikkeNye.map((r, i) => ({
-      i: eksisterende.length + i,
-      id: r.FullName,
-      dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
-      snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" ").slice(0, 300),
-    }));
-
-    const grupper = nyeKandidater.length > 0
-      ? await grupperMedClaude(nyeKandidater, st, sagsbeskrivelse)
-      : { grupper: [] };
+    const nyeKandidater = await byggKandidaterMedTekst(unikkeNye, eksisterende.length, st);
+    const grupper = nyeKandidater.length > 0 ? await grupperMedClaude(nyeKandidater, st, sagsbeskrivelse) : { grupper: [] };
 
     hitsCache.set(cacheId, { resultater: alleResultater, søgeTekst: st, criteria: cr, sideSidst: 999 });
 
@@ -395,7 +350,6 @@ export async function POST(req) {
   if (!searchRes.ok) return Response.json({ error: "Søgning fejlede" }, { status: 500 });
   const searchData = await searchRes.json();
   const results = (Array.isArray(searchData.Results) ? searchData.Results : []).slice(0, 5);
-
   if (results.length === 0) return Response.json({ afgørelser: [], sammendrag: null });
 
   const afgørelser = await Promise.all(results.map(async (r) => {
