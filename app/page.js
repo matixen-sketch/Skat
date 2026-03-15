@@ -42,7 +42,7 @@ function Section({ titel, ikon, fremhæv, children }) {
 }
 
 // ── Overblik trin ────────────────────────────────────────────────────
-function OverblikPanel({ overblik, onAnalyser, loading }) {
+function OverblikPanel({ overblik, onAnalyser, onHentFlere, onHentAlle, loadingFlere, loadingAlle }) {
   const [valgte, setValgte] = useState(() => {
     const init = {};
     overblik.grupper.forEach(g => g.anbefalede?.forEach(i => { init[i] = true; }));
@@ -61,13 +61,32 @@ function OverblikPanel({ overblik, onAnalyser, loading }) {
   return (
     <div className="space-y-4">
       <div className="bg-white border border-slate-200 rounded-xl px-5 py-4">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-sm font-semibold text-slate-700">
-            Fandt {overblik.totalCount} afgørelser — vælg hvad der skal analyseres
-          </span>
-          <span className="text-xs text-slate-400 font-sans">{antalValgte} valgt</span>
+        <div className="flex items-start justify-between gap-4 mb-2">
+          <div>
+            <span className="text-sm font-semibold text-slate-700">
+              Fandt {overblik.totalCount} afgørelser — vælg hvad der skal analyseres
+            </span>
+            {overblik.databaseTotal > overblik.totalCount && (
+              <p className="text-xs text-slate-400 font-sans mt-0.5">
+                Databasen indeholder i alt {overblik.databaseTotal} afgørelser for denne søgning
+              </p>
+            )}
+          </div>
+          <span className="text-xs text-slate-400 font-sans whitespace-nowrap">{antalValgte} valgt</span>
         </div>
         <p className="text-xs text-slate-400 font-sans">AI har grupperet resultaterne nedenfor. Vælg grupper eller enkeltafgørelser og klik Analyser.</p>
+        {overblik.harFlere && (
+          <div className="flex gap-2 mt-3">
+            <button onClick={onHentFlere} disabled={loadingFlere || loadingAlle}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-400 font-sans disabled:opacity-50 flex items-center gap-1.5">
+              {loadingFlere ? <><span className="w-3 h-3 border border-slate-400 border-t-slate-700 rounded-full animate-spin inline-block" />Henter...</> : "＋ Hent næste 150 afgørelser"}
+            </button>
+            <button onClick={onHentAlle} disabled={loadingFlere || loadingAlle}
+              className="text-xs px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 hover:border-amber-400 font-sans disabled:opacity-50 flex items-center gap-1.5">
+              {loadingAlle ? <><span className="w-3 h-3 border border-amber-300 border-t-amber-600 rounded-full animate-spin inline-block" />Henter alle...</> : `⬇ Søg i alle ${overblik.databaseTotal} afgørelser`}
+            </button>
+          </div>
+        )}
       </div>
 
       {overblik.grupper.map((g, gi) => {
@@ -76,7 +95,8 @@ function OverblikPanel({ overblik, onAnalyser, loading }) {
         return (
           <div key={gi} className="bg-white border border-slate-100 rounded-xl overflow-hidden">
             <div className="px-5 py-3 flex items-start gap-3 border-b border-slate-50">
-              <input type="checkbox" checked={alleValgt} ref={el => { if (el) el.indeterminate = !alleValgt && nogleValgt; }}
+              <input type="checkbox" checked={alleValgt}
+                ref={el => { if (el) el.indeterminate = !alleValgt && nogleValgt; }}
                 onChange={e => toggleGruppe(g, e.target.checked)}
                 className="mt-0.5 cursor-pointer" />
               <div className="flex-1">
@@ -86,6 +106,9 @@ function OverblikPanel({ overblik, onAnalyser, loading }) {
                   <Tag color="bg-slate-50 text-slate-400">{g.årsSpænd}</Tag>
                 </div>
                 <p className="text-xs text-slate-500 font-sans mt-0.5">{g.beskrivelse}</p>
+                {g.anbefaletBegrundelse && (
+                  <p className="text-xs text-amber-600 font-sans mt-1">★ {g.anbefaletBegrundelse}</p>
+                )}
               </div>
             </div>
             <div className="divide-y divide-slate-50">
@@ -113,15 +136,10 @@ function OverblikPanel({ overblik, onAnalyser, loading }) {
       })}
 
       <button onClick={() => onAnalyser(Object.keys(valgte).filter(k => valgte[k]).map(Number))}
-        disabled={loading || antalValgte === 0}
+        disabled={antalValgte === 0}
         className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-colors disabled:opacity-50 font-sans"
-        style={{ background: loading ? "#64748b" : "#18293d" }}>
-        {loading ? (
-          <span className="flex items-center justify-center gap-2">
-            <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-            Analyserer {antalValgte} afgørelser…
-          </span>
-        ) : `Analyser ${antalValgte} valgte afgørelser`}
+        style={{ background: antalValgte === 0 ? "#64748b" : "#18293d" }}>
+        Analyser {antalValgte} valgte afgørelser
       </button>
     </div>
   );
@@ -330,7 +348,7 @@ function SammendragPanel({ s }) {
 export default function Page() {
   const [trin, setTrin] = useState("start"); // start | overblik | resultater
   const [overblik, setOverblik] = useState(null);
-  const [alleRawHits, setAlleRawHits] = useState([]);
+  const [cacheId, setCacheId] = useState(null);
   const [afgørelser, setAfgørelser] = useState([]);
   const [sammendrag, setSammendrag] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -338,7 +356,7 @@ export default function Page() {
   const [fejl, setFejl] = useState(null);
   const [åbenId, setÅbenId] = useState(null);
   const [søgeTekst, setSøgeTekst] = useState("");
-  const [valgtPeriode, setValgtPeriode] = useState("Seneste måned");
+  const [sagsbeskrivelse, setSagsbeskrivelse] = useState("");
   const [valgtSagstype, setValgtSagstype] = useState("Alle");
   const [gemte, setGemte] = useState({});
   const [noter, setNoter] = useState({});
@@ -346,28 +364,26 @@ export default function Page() {
 
   const søg = useCallback(async () => {
     setFejl(null); setLoading(true);
-    if (søgeTekst) {
-      // Fritekst → vis overblik først
+    if (søgeTekst || sagsbeskrivelse) {
       setLoadingTekst("Søger i alle afgørelser…");
       try {
         const res = await fetch("/api/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ handling: "overblik", søgeTekst, sagstype: valgtSagstype }),
+          body: JSON.stringify({ handling: "overblik", søgeTekst, sagsbeskrivelse, sagstype: valgtSagstype }),
         });
         const data = await res.json();
         setOverblik(data);
-        setAlleRawHits(data.alleRawHits || []);
+        setCacheId(data.cacheId);
         setTrin("overblik");
       } catch (e) { setFejl("Søgning fejlede: " + e.message); }
     } else {
-      // Dato-søgning → direkte til resultater
       setLoadingTekst("Henter og analyserer afgørelser…");
       try {
         const res = await fetch("/api/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ periode: valgtPeriode, sagstype: valgtSagstype }),
+          body: JSON.stringify({ sagstype: valgtSagstype }),
         });
         const data = await res.json();
         setAfgørelser(data.afgørelser || []);
@@ -376,16 +392,59 @@ export default function Page() {
       } catch (e) { setFejl("Hentning fejlede: " + e.message); }
     }
     setLoading(false);
-  }, [søgeTekst, valgtPeriode, valgtSagstype]);
+  }, [søgeTekst, sagsbeskrivelse, valgtSagstype]);
 
-  const analyser = useCallback(async (valgteIndeks) => {
+  const [loadingFlere, setLoadingFlere] = useState(false);
+  const [loadingAlle, setLoadingAlle] = useState(false);
+
+  const hentFlere = useCallback(async () => {
+    setLoadingFlere(true);
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ handling: "hentFlere", cacheId, søgeTekst, sagsbeskrivelse }),
+      });
+      const data = await res.json();
+      setOverblik(prev => ({
+        ...prev,
+        grupper: [...(prev.grupper || []), ...(data.grupper || [])],
+        hits: [...(prev.hits || []), ...(data.hits || [])],
+        totalCount: data.totalCount,
+        databaseTotal: data.databaseTotal,
+        harFlere: data.harFlere,
+      }));
+    } catch (e) { setFejl("Kunne ikke hente flere: " + e.message); }
+    setLoadingFlere(false);
+  }, [cacheId, søgeTekst, sagsbeskrivelse]);
+
+  const hentAlle = useCallback(async () => {
+    setLoadingAlle(true);
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ handling: "hentAlle", cacheId, søgeTekst, sagsbeskrivelse }),
+      });
+      const data = await res.json();
+      setOverblik(prev => ({
+        ...prev,
+        grupper: [...(prev.grupper || []), ...(data.grupper || [])],
+        hits: [...(prev.hits || []), ...(data.hits || [])],
+        totalCount: data.totalCount,
+        databaseTotal: data.databaseTotal,
+        harFlere: false,
+      }));
+    } catch (e) { setFejl("Kunne ikke hente alle: " + e.message); }
+    setLoadingAlle(false);
+  }, [cacheId, søgeTekst, sagsbeskrivelse]);
     setLoading(true);
     setLoadingTekst(`Analyserer ${valgteIndeks.length} afgørelser med AI…`);
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ handling: "analyser", valgteIndeks, alleHits: alleRawHits }),
+        body: JSON.stringify({ handling: "analyser", valgteIndeks, cacheId }),
       });
       const data = await res.json();
       setAfgørelser(data.afgørelser || []);
@@ -393,7 +452,7 @@ export default function Page() {
       setTrin("resultater");
     } catch (e) { setFejl("Analyse fejlede: " + e.message); }
     setLoading(false);
-  }, [alleRawHits]);
+  }, [cacheId]);
 
   const nulstil = () => { setTrin("start"); setOverblik(null); setAfgørelser([]); setSammendrag(null); setFejl(null); };
 
@@ -428,21 +487,24 @@ export default function Page() {
       {/* Søgebar */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-6 py-5 space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 font-sans">Søg i afgørelser</label>
-            <input type="text" value={søgeTekst} onChange={e => setSøgeTekst(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && søg()}
-              placeholder='fx "ligningslovens § 8 y", "fri bil", "transfer pricing"'
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-400 font-sans" />
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 font-sans">Søg på emne eller lovbestemmelse</label>
+              <input type="text" value={søgeTekst} onChange={e => setSøgeTekst(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && søg()}
+                placeholder='fx "ligningslovens § 8 y", "fri bil", "transfer pricing"'
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-400 font-sans" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 font-sans">
+                Beskriv din konkrete sag <span className="text-slate-400 normal-case font-normal">(valgfrit — bruges til at finde de mest relevante afgørelser)</span>
+              </label>
+              <textarea value={sagsbeskrivelse} onChange={e => setSagsbeskrivelse(e.target.value)}
+                placeholder="fx: Min klient er selvstændig konsulent der ønsker at fradrage udgifter til hjemmekontor. Skattestyrelsen har nægtet fradrag med henvisning til at arbejdet primært udføres hos klienterne..."
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-400 font-sans resize-none h-20" />
+            </div>
           </div>
           <div className="flex flex-wrap gap-3 items-end">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 font-sans">Periode</label>
-              <select value={valgtPeriode} onChange={e => setValgtPeriode(e.target.value)}
-                className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white outline-none cursor-pointer font-sans">
-                {PERIODER.map(p => <option key={p}>{p}</option>)}
-              </select>
-            </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 font-sans">Udfald</label>
               <select value={valgtSagstype} onChange={e => setValgtSagstype(e.target.value)}
@@ -498,7 +560,9 @@ export default function Page() {
 
         {/* Trin 1: Overblik */}
         {!loading && trin === "overblik" && overblik && (
-          <OverblikPanel overblik={overblik} onAnalyser={analyser} loading={loading} />
+          <OverblikPanel overblik={overblik} onAnalyser={analyser}
+          onHentFlere={hentFlere} onHentAlle={hentAlle}
+          loadingFlere={loadingFlere} loadingAlle={loadingAlle} />
         )}
 
         {/* Trin 2: Resultater */}
