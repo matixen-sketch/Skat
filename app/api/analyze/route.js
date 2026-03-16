@@ -1,7 +1,6 @@
 const PORTAL_ID = "62c3f8f5-dca9-4058-918f-d8470a3ff3dd";
 const BASE_URL = `https://afgoerelsesdatabasen.dk/api/v1/portals/${PORTAL_ID}`;
 
-// Server-side cache
 const hitsCache = new Map();
 
 function rydCache() {
@@ -11,11 +10,7 @@ function rydCache() {
 }
 
 function søgeTilTerms(tekst) {
-  return tekst
-    .trim()
-    .replace(/^[""]|[""]$/g, "")
-    .split(/\s+/)
-    .filter(Boolean);
+  return tekst.trim().replace(/^[""]|[""]$/g, "").split(/\s+/).filter(Boolean);
 }
 
 async function søgSide(terms, criteria, page) {
@@ -98,7 +93,7 @@ async function claudeJSON(prompt, maxTokens = 1500) {
 
 async function hentOverbliksresumé(r, søgeTekst) {
   const tekst = await hentDokumentTekst(r.HiveId, r.FullName);
-  if (!tekst) return (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400);
+  if (!tekst) return (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 500);
   const resumé = await claudeJSON(`Du er skatteadvokat. Søgning: "${søgeTekst}"
 
 Læs denne afgørelse og skriv ET kort resumé på 2-3 sætninger der beskriver:
@@ -111,7 +106,7 @@ ${tekst.slice(0, 2000)}
 
 Returner KUN dette JSON:
 {"resumé": "2-3 sætninger"}`, 300);
-  return resumé?.resumé || (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400);
+  return resumé?.resumé || (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 500);
 }
 
 async function grupperMedClaude(kandidater, søgeTekst, sagsbeskrivelse) {
@@ -149,24 +144,24 @@ Dato: ${afgørelse.dato}
 ${tekst ? `Afgørelsestekst:\n${tekst.slice(0, 3000)}` : "Ingen tekst tilgængelig."}
 
 {
-  "faktum": "2 sætninger om sagens konkrete faktiske omstændigheder — hvem er parter, hvad er den faktiske situation",
-  "afgørelse": "Hvad kom Landsskatteretten præcist frem til? Inkludér gerne et kort direkte citat fra afgørelsens konklusion hvis muligt",
-  "præjudikatsværdi": "Én sætning: er dette et præjudikat, bekræftelse af eksisterende praksis, eller en undtagelse fra hovedreglen?",
-  "for_skatteyder": "Konkret: i hvilke situationer og med hvilke faktuelle omstændigheder kan denne afgørelse bruges som argument FOR skatteyder?",
-  "mod_skatteyder": "Konkret: i hvilke situationer vil Skattestyrelsen kunne bruge denne afgørelse som argument MOD skatteyder?",
-  "anvendelsesbetingelser": "Hvilke specifikke faktuelle omstændigheder skal være til stede for at afgørelsen er anvendelig som præcedens?",
+  "faktum": "2 sætninger om sagens konkrete faktiske omstændigheder",
+  "afgørelse": "Hvad kom Landsskatteretten præcist frem til? Inkludér gerne et kort direkte citat fra afgørelsens konklusion",
+  "præjudikatsværdi": "Én sætning: præjudikat, bekræftelse af eksisterende praksis, eller undtagelse?",
+  "for_skatteyder": "I hvilke situationer kan denne afgørelse bruges som argument FOR skatteyder?",
+  "mod_skatteyder": "I hvilke situationer vil Skattestyrelsen kunne bruge afgørelsen MOD skatteyder?",
+  "anvendelsesbetingelser": "Hvilke faktuelle omstændigheder skal være til stede for at afgørelsen er anvendelig?",
   "sagstype": "Stadfæstelse | Medhold | Delvist medhold | Hjemvisning | Nedsættelse | Bindende svar",
   "område": "primært retsområde",
   "lovhenvisninger": ["LL § x"],
   "nøgleord": ["nøgleord1"],
   "relevans": "høj | middel | lav",
-  "klientrelevans_spørgsmål": "Et præcist spørgsmål advokaten kan stille klienten for at vurdere om afgørelsen er direkte anvendelig"
+  "klientrelevans_spørgsmål": "Et præcist spørgsmål advokaten kan stille for at vurdere om afgørelsen er direkte anvendelig"
 }`);
 }
 
 async function genererTværgåendeSammendrag(afgørelser) {
   const liste = afgørelser.map((a, i) =>
-    `${i + 1}. ${a.id} (${a.dato}): ${a.resumé} Udfald: ${a.sagstype}.`
+    `${i + 1}. ${a.id} (${a.dato}): ${a.faktum} Udfald: ${a.sagstype}.`
   ).join("\n");
   return claudeJSON(`Du er skatteadvokat. Analyser disse ${afgørelser.length} afgørelser samlet:
 
@@ -178,22 +173,12 @@ ${liste}
   "medhold_antal": 0,
   "stadfæstelse_antal": 0,
   "hjemvisning_antal": 0,
-  "vigtigste_pointe": "vigtigste praktiske konsekvens (2 sætninger)",
+  "vigtigste_pointe": "vigtigste praktiske konsekvens for aktive skattesager (2 sætninger)",
   "fælles_lovhenvisninger": ["§ x"]
 }`);
 }
 
-function byggKandidater(resultater, startIndeks, søgeTekst) {
-  return resultater.map((r, i) => ({
-    i: startIndeks + i,
-    id: r.FullName,
-    dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
-    snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400),
-  }));
-}
-
-async function byggKandidaterMedTekst(resultater, startIndeks, søgeTekst) {
-  // Ingen fuld tekst i overblikket — brugeren henter manuelt via "Hent AI resumé"
+function byggKandidater(resultater, startIndeks) {
   return resultater.map((r, i) => ({
     i: startIndeks + i,
     id: r.FullName,
@@ -217,7 +202,7 @@ export async function POST(req) {
     return Response.json({ resumé });
   }
 
-
+  // ── RELATEREDE ────────────────────────────────────────────────────
   if (handling === "relaterede" && søgeTekst) {
     const { resultater } = await hentSider(søgeTekst, {}, 1, 1);
     return Response.json(resultater.slice(0, 6).map(r => ({
@@ -230,19 +215,20 @@ export async function POST(req) {
 
   // ── OVERBLIK ─────────────────────────────────────────────────────
   if (handling === "overblik" && (søgeTekst || sagsbeskrivelse)) {
-    const { resultater, totalCount } = await hentSider(søgeTekst || sagsbeskrivelse, criteria, 1, 10);
+    const st = søgeTekst || sagsbeskrivelse;
+    const { resultater, totalCount } = await hentSider(st, criteria, 1, 10);
     console.log(`Overblik: ${resultater.length} afgørelser, total: ${totalCount}`);
 
     if (resultater.length === 0) {
       return Response.json({ grupper: [], hits: [], totalCount: 0, databaseTotal: 0, cacheId: null, harFlere: false });
     }
 
-    const kandidater = await byggKandidaterMedTekst(resultater, 0, søgeTekst || sagsbeskrivelse);
-    const grupper = await grupperMedClaude(kandidater, søgeTekst || sagsbeskrivelse, sagsbeskrivelse);
+    const kandidater = byggKandidater(resultater, 0);
+    const grupper = await grupperMedClaude(kandidater, st, sagsbeskrivelse);
 
     rydCache();
     const nyCacheId = Date.now().toString();
-    hitsCache.set(nyCacheId, { resultater, søgeTekst: søgeTekst || sagsbeskrivelse, criteria, sideSidst: 10 });
+    hitsCache.set(nyCacheId, { resultater, søgeTekst: st, criteria, sideSidst: 10 });
 
     return Response.json({
       grupper: grupper?.grupper || [],
@@ -266,8 +252,10 @@ export async function POST(req) {
     const unikkeNye = nye.filter(r => !eksisterendeIds.has(r.FullName));
     const alleResultater = [...eksisterende, ...unikkeNye];
 
-    const nyeKandidater = await byggKandidaterMedTekst(unikkeNye, eksisterende.length, st);
-    const grupper = nyeKandidater.length > 0 ? await grupperMedClaude(nyeKandidater, st, sagsbeskrivelse) : { grupper: [] };
+    const nyeKandidater = byggKandidater(unikkeNye, eksisterende.length);
+    const grupper = nyeKandidater.length > 0
+      ? await grupperMedClaude(nyeKandidater, st, sagsbeskrivelse)
+      : { grupper: [] };
 
     hitsCache.set(cacheId, { resultater: alleResultater, søgeTekst: st, criteria: cr, sideSidst: sideSidst + 10 });
 
@@ -293,8 +281,10 @@ export async function POST(req) {
     const unikkeNye = nye.filter(r => !eksisterendeIds.has(r.FullName));
     const alleResultater = [...eksisterende, ...unikkeNye];
 
-    const nyeKandidater = await byggKandidaterMedTekst(unikkeNye, eksisterende.length, st);
-    const grupper = nyeKandidater.length > 0 ? await grupperMedClaude(nyeKandidater, st, sagsbeskrivelse) : { grupper: [] };
+    const nyeKandidater = byggKandidater(unikkeNye, eksisterende.length);
+    const grupper = nyeKandidater.length > 0
+      ? await grupperMedClaude(nyeKandidater, st, sagsbeskrivelse)
+      : { grupper: [] };
 
     hitsCache.set(cacheId, { resultater: alleResultater, søgeTekst: st, criteria: cr, sideSidst: 999 });
 
@@ -321,9 +311,10 @@ export async function POST(req) {
       const base = {
         id: r.FullName || r.title, dato, titel: r.title || r.FullName,
         instans: "Landsskatteretten", område: "Landsskatteretten",
-        sagstype: "Afgørelse", resumé: "", afgørelse: "",
-        praksisvurdering: "", lovhenvisninger: [], nøgleord: [],
-        handlingspunkter: [], relevans: "middel", klientrelevans_spørgsmål: "",
+        sagstype: "Afgørelse", faktum: "", afgørelse: "",
+        præjudikatsværdi: "", for_skatteyder: "", mod_skatteyder: "",
+        anvendelsesbetingelser: "", lovhenvisninger: [], nøgleord: [],
+        relevans: "middel", klientrelevans_spørgsmål: "",
         url: `https://afgoerelsesdatabasen.dk/h/${r.HiveId}/${r.FullName}?showExact=true`,
       };
       const tekst = r.HiveId && r.FullName ? await hentDokumentTekst(r.HiveId, r.FullName) : "";
@@ -359,9 +350,10 @@ export async function POST(req) {
     const base = {
       id: r.FullName || r.title, dato, titel: r.title || r.FullName,
       instans: "Landsskatteretten", område: "Landsskatteretten",
-      sagstype: "Afgørelse", resumé: "", afgørelse: "",
-      praksisvurdering: "", lovhenvisninger: [], nøgleord: [],
-      handlingspunkter: [], relevans: "middel", klientrelevans_spørgsmål: "",
+      sagstype: "Afgørelse", faktum: "", afgørelse: "",
+      præjudikatsværdi: "", for_skatteyder: "", mod_skatteyder: "",
+      anvendelsesbetingelser: "", lovhenvisninger: [], nøgleord: [],
+      relevans: "middel", klientrelevans_spørgsmål: "",
       url: `https://afgoerelsesdatabasen.dk/h/${r.HiveId}/${r.FullName}?showExact=true`,
     };
     const tekst = r.HiveId && r.FullName ? await hentDokumentTekst(r.HiveId, r.FullName) : "";
