@@ -193,25 +193,13 @@ function byggKandidater(resultater, startIndeks, søgeTekst) {
 }
 
 async function byggKandidaterMedTekst(resultater, startIndeks, søgeTekst) {
-  // Kun top 10 får fuld tekst for at undgå timeout
-  const top10 = resultater.slice(0, 10);
-  const resten = resultater.slice(10);
-
-  const medTekst = await Promise.all(top10.map(async (r, i) => ({
+  // Ingen fuld tekst i overblikket — brugeren henter manuelt via "Hent AI resumé"
+  return resultater.map((r, i) => ({
     i: startIndeks + i,
     id: r.FullName,
     dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
-    snippet: await hentOverbliksresumé(r, søgeTekst),
-  })));
-
-  const udenTekst = resten.map((r, i) => ({
-    i: startIndeks + 10 + i,
-    id: r.FullName,
-    dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
-    snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 400),
+    snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 500),
   }));
-
-  return [...medTekst, ...udenTekst];
 }
 
 export async function POST(req) {
