@@ -142,23 +142,25 @@ Returner KUN dette JSON:
 }
 
 async function analyserAfgørelse(afgørelse, tekst) {
-  return claudeJSON(`Du er en erfaren dansk skatteretsadvokat. Analyser denne Landsskatteretsafgørelse og returner KUN et JSON-objekt uden markdown.
+  return claudeJSON(`Du er en erfaren dansk skatteretsadvokat der arbejder med aktive skattesager. Analyser denne Landsskatteretsafgørelse og returner KUN et JSON-objekt uden markdown.
 
 Journalnummer: ${afgørelse.id}
 Dato: ${afgørelse.dato}
 ${tekst ? `Afgørelsestekst:\n${tekst.slice(0, 3000)}` : "Ingen tekst tilgængelig."}
 
 {
-  "resumé": "præcist juridisk resumé af faktum og retlige spørgsmål (3-4 sætninger)",
-  "afgørelse": "afgørelsens resultat og begrundelse (2-3 sætninger)",
-  "praksisvurdering": "betydning for retspraksis (2-3 sætninger)",
+  "faktum": "2 sætninger om sagens konkrete faktiske omstændigheder — hvem er parter, hvad er den faktiske situation",
+  "afgørelse": "Hvad kom Landsskatteretten præcist frem til? Inkludér gerne et kort direkte citat fra afgørelsens konklusion hvis muligt",
+  "præjudikatsværdi": "Én sætning: er dette et præjudikat, bekræftelse af eksisterende praksis, eller en undtagelse fra hovedreglen?",
+  "for_skatteyder": "Konkret: i hvilke situationer og med hvilke faktuelle omstændigheder kan denne afgørelse bruges som argument FOR skatteyder?",
+  "mod_skatteyder": "Konkret: i hvilke situationer vil Skattestyrelsen kunne bruge denne afgørelse som argument MOD skatteyder?",
+  "anvendelsesbetingelser": "Hvilke specifikke faktuelle omstændigheder skal være til stede for at afgørelsen er anvendelig som præcedens?",
   "sagstype": "Stadfæstelse | Medhold | Delvist medhold | Hjemvisning | Nedsættelse | Bindende svar",
   "område": "primært retsområde",
   "lovhenvisninger": ["LL § x"],
   "nøgleord": ["nøgleord1"],
-  "handlingspunkter": ["råd 1", "råd 2"],
   "relevans": "høj | middel | lav",
-  "klientrelevans_spørgsmål": "spørgsmål til advokaten om klientens situation"
+  "klientrelevans_spørgsmål": "Et præcist spørgsmål advokaten kan stille klienten for at vurdere om afgørelsen er direkte anvendelig"
 }`);
 }
 
