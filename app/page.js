@@ -22,6 +22,7 @@ const TENDENS_CONFIG = {
 function Tag({ children, color = "bg-slate-100 text-slate-600" }) {
   return <span className={`text-xs px-2 py-0.5 rounded font-sans font-medium ${color}`}>{children}</span>;
 }
+
 function SectionTitel({ ikon, tekst }) {
   return (
     <div className="flex items-center gap-2 mb-1">
@@ -30,23 +31,35 @@ function SectionTitel({ ikon, tekst }) {
     </div>
   );
 }
-function Section({ titel, ikon, fremhæv, children }) {
+
+function Section({ titel, ikon, children }) {
   if (!children) return null;
   return (
-    <div className={fremhæv ? "bg-amber-50 border border-amber-100 rounded-lg px-4 py-3" : ""}>
+    <div>
       <SectionTitel ikon={ikon} tekst={titel} />
       <p className="text-sm text-slate-600 leading-relaxed font-sans">{children}</p>
     </div>
   );
 }
 
-// ── Overblik panel ────────────────────────────────────────────────────
+function ColorSection({ titel, ikon, color, children }) {
+  if (!children) return null;
+  return (
+    <div className={`rounded-lg px-4 py-3 ${color}`}>
+      <SectionTitel ikon={ikon} tekst={titel} />
+      <p className="text-sm text-slate-700 leading-relaxed font-sans">{children}</p>
+    </div>
+  );
+}
+
+// ── Overblik hit ─────────────────────────────────────────────────────
 function OverblikHit({ hit, valgt, anbefalet, onToggle, cacheId }) {
   const [resumé, setResumé] = useState(hit.snippet);
   const [henterResumé, setHenterResumé] = useState(false);
   const [fuldt, setFuldt] = useState(false);
 
-  const hentResumé = async () => {
+  const hentResumé = async (e) => {
+    e.preventDefault();
     setHenterResumé(true);
     try {
       const res = await fetch("/api/analyze", {
@@ -71,19 +84,15 @@ function OverblikHit({ hit, valgt, anbefalet, onToggle, cacheId }) {
           {fuldt && <Tag color="bg-green-100 text-green-600">AI resumé</Tag>}
         </div>
         {resumé && (
-          <p
-            className={`text-xs text-slate-600 font-sans leading-relaxed ${fuldt ? "" : "line-clamp-3"}`}
+          <p className={`text-xs text-slate-600 font-sans leading-relaxed ${fuldt ? "" : "line-clamp-3"}`}
             dangerouslySetInnerHTML={{
               __html: resumé
                 .replace(/<em>/g, '<mark class="bg-amber-100 text-amber-800 rounded px-0.5 not-italic font-medium">')
-                .replace(/<\/em>/g, '</mark>')
-            }}
-          />
+                .replace(/<\/em>/g, "</mark>")
+            }} />
         )}
         {!fuldt && (
-          <button
-            onClick={e => { e.preventDefault(); hentResumé(); }}
-            disabled={henterResumé}
+          <button onClick={hentResumé} disabled={henterResumé}
             className="mt-1.5 text-xs text-blue-500 hover:text-blue-700 font-sans flex items-center gap-1 disabled:opacity-50">
             {henterResumé
               ? <><span className="w-3 h-3 border border-blue-300 border-t-blue-600 rounded-full animate-spin inline-block" />Henter resumé…</>
@@ -94,6 +103,9 @@ function OverblikHit({ hit, valgt, anbefalet, onToggle, cacheId }) {
     </label>
   );
 }
+
+// ── Overblik panel ────────────────────────────────────────────────────
+function OverblikPanel({ overblik, cacheId, onAnalyser, onHentFlere, onHentAlle, loadingFlere, loadingAlle }) {
   const [valgte, setValgte] = useState({});
 
   const toggleIndeks = i => setValgte(v => ({ ...v, [i]: !v[i] }));
@@ -106,7 +118,7 @@ function OverblikHit({ hit, valgt, anbefalet, onToggle, cacheId }) {
   const antalValgte = Object.values(valgte).filter(Boolean).length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20">
       <div className="bg-white border border-slate-200 rounded-xl px-5 py-4">
         <div className="flex items-start justify-between gap-4 mb-2">
           <div>
@@ -170,16 +182,10 @@ function OverblikHit({ hit, valgt, anbefalet, onToggle, cacheId }) {
               {g.indeks.map(i => {
                 const hit = overblik.hits[i];
                 if (!hit) return null;
-                const anbefalet = g.anbefalede?.includes(i);
                 return (
-                  <OverblikHit
-                    key={i}
-                    hit={hit}
-                    valgt={!!valgte[i]}
-                    anbefalet={anbefalet}
-                    onToggle={() => toggleIndeks(i)}
-                    cacheId={cacheId}
-                  />
+                  <OverblikHit key={i} hit={hit} valgt={!!valgte[i]}
+                    anbefalet={g.anbefalede?.includes(i)}
+                    onToggle={() => toggleIndeks(i)} cacheId={cacheId} />
                 );
               })}
             </div>
@@ -218,10 +224,10 @@ function KlientModal({ spørgsmål, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
-        <h3 className="font-semibold text-slate-800 mb-1">Klientrelevans</h3>
+        <h3 className="font-semibold text-slate-800 mb-1">Anvendelig i min sag?</h3>
         <p className="text-sm text-slate-500 font-sans mb-3">{spørgsmål}</p>
         <textarea value={svar} onChange={e => setSvar(e.target.value)}
-          placeholder="Beskriv klientens situation..."
+          placeholder="Beskriv sagens omstændigheder..."
           className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-sans outline-none focus:border-slate-400 resize-none h-24 mb-3" />
         {vurdering && (
           <div className="bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 mb-3">
@@ -248,7 +254,7 @@ function RelateredeModal({ nøgleord, onClose }) {
     fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handling: "relaterede", søgeTekst: nøgleord?.slice(0, 2).join(" ") }),
+      body: JSON.stringify({ handling: "relaterede", søgeTekst: (nøgleord || []).slice(0, 2).join(" ") }),
     }).then(r => r.json()).then(setData);
   }, []);
   return (
@@ -281,12 +287,16 @@ function AfgørelseKort({ a, åben, onToggle, onGemToggle, gemt, noter, onNoterC
   const eksporter = () => {
     const tekst = [
       `AFGØRELSE: ${a.id}`, `Dato: ${a.dato} | Udfald: ${a.sagstype} | Område: ${a.område}`, "",
-      `RESUMÉ`, a.resumé, "", `AFGØRELSE`, a.afgørelse, "",
-      `BETYDNING FOR PRAKSIS`, a.praksisvurdering, "",
+      `FAKTUM`, a.faktum, "",
+      `AFGØRELSE`, a.afgørelse, "",
+      `PRÆJUDIKATSVÆRDI`, a.præjudikatsværdi, "",
+      `ARGUMENT FOR SKATTEYDER`, a.for_skatteyder, "",
+      `ARGUMENT MOD SKATTEYDER`, a.mod_skatteyder, "",
+      `BETINGELSER FOR ANVENDELSE`, a.anvendelsesbetingelser, "",
       `LOVHENVISNINGER: ${a.lovhenvisninger?.join(", ") || "–"}`, "",
-      `HANDLINGSPUNKTER`, ...(a.handlingspunkter?.map((h, i) => `${i + 1}. ${h}`) || []),
-      "", noter ? `NOTER\n${noter}` : "", "", `LINK: ${a.url}`,
-    ].join("\n");
+      noter ? `NOTER\n${noter}` : "",
+      `LINK: ${a.url}`,
+    ].filter(Boolean).join("\n");
     const blob = new Blob([tekst], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const el = document.createElement("a");
@@ -315,7 +325,11 @@ function AfgørelseKort({ a, åben, onToggle, onGemToggle, gemt, noter, onNoterC
               </div>
               {a.lovhenvisninger?.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
-                  {a.lovhenvisninger.map(l => <Tag key={l} color="bg-blue-50 text-blue-600">{l}</Tag>)}
+                  {a.lovhenvisninger.map(l => (
+                    <a key={l} href={`https://www.retsinformation.dk/eli/lta/2023/1462`} target="_blank" rel="noopener noreferrer">
+                      <Tag color="bg-blue-50 text-blue-600 hover:bg-blue-100">{l}</Tag>
+                    </a>
+                  ))}
                 </div>
               )}
             </div>
@@ -324,9 +338,30 @@ function AfgørelseKort({ a, åben, onToggle, onGemToggle, gemt, noter, onNoterC
         </button>
         {åben && (
           <div className="px-5 pb-5 pt-1 border-t border-slate-50 space-y-4">
-            <Section titel="Resumé" ikon="§">{a.resumé}</Section>
+            <Section titel="Faktum" ikon="§">{a.faktum}</Section>
             <Section titel="Afgørelse" ikon="⚖">{a.afgørelse}</Section>
-            <Section titel="Betydning for praksis" ikon="★" fremhæv>{a.praksisvurdering}</Section>
+            <Section titel="Præjudikatsværdi" ikon="★">{a.præjudikatsværdi}</Section>
+
+            {(a.for_skatteyder || a.mod_skatteyder || a.anvendelsesbetingelser) && (
+              <div className="space-y-3">
+                {a.for_skatteyder && (
+                  <ColorSection titel="Argument FOR skatteyder" ikon="↑" color="bg-emerald-50 border border-emerald-100">
+                    {a.for_skatteyder}
+                  </ColorSection>
+                )}
+                {a.mod_skatteyder && (
+                  <ColorSection titel="Argument MOD skatteyder" ikon="↓" color="bg-red-50 border border-red-100">
+                    {a.mod_skatteyder}
+                  </ColorSection>
+                )}
+                {a.anvendelsesbetingelser && (
+                  <ColorSection titel="Betingelser for anvendelse som præcedens" ikon="✓" color="bg-blue-50 border border-blue-100">
+                    {a.anvendelsesbetingelser}
+                  </ColorSection>
+                )}
+              </div>
+            )}
+
             {a.nøgleord?.length > 0 && (
               <div>
                 <SectionTitel ikon="🏷" tekst="Nøgleord" />
@@ -335,18 +370,7 @@ function AfgørelseKort({ a, åben, onToggle, onGemToggle, gemt, noter, onNoterC
                 </div>
               </div>
             )}
-            {a.handlingspunkter?.length > 0 && (
-              <div>
-                <SectionTitel ikon="→" tekst="Handlingspunkter for advokaten" />
-                <ul className="space-y-1.5 mt-2">
-                  {a.handlingspunkter.map((h, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-slate-600 font-sans">
-                      <span className="text-amber-500 font-bold flex-shrink-0 mt-0.5">{i + 1}.</span><span>{h}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+
             <div>
               <button onClick={() => setVisNoter(!visNoter)} className="text-xs text-slate-400 hover:text-slate-600 font-sans flex items-center gap-1">
                 ✏️ {visNoter ? "Skjul noter" : noter ? "Se/rediger noter" : "Tilføj noter"}
@@ -357,21 +381,12 @@ function AfgørelseKort({ a, åben, onToggle, onGemToggle, gemt, noter, onNoterC
                   className="w-full mt-2 border border-slate-200 rounded-lg px-3 py-2 text-sm font-sans outline-none focus:border-slate-400 resize-none h-20" />
               )}
             </div>
+
             <div className="flex flex-wrap gap-2 pt-1">
-              {a.url && (
-                <a href={a.url} target="_blank" rel="noopener noreferrer"
-                  className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-400 font-sans transition-colors">
-                  Se på afgoerelsesdatabasen.dk →
-                </a>
-              )}
+              {a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-400 font-sans transition-colors">Se på afgoerelsesdatabasen.dk →</a>}
               <button onClick={() => setVisRelaterede(true)} className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-400 font-sans transition-colors">🔗 Relaterede</button>
-              {a.klientrelevans_spørgsmål && (
-                <button onClick={() => setVisKlient(true)} className="text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 hover:border-blue-400 font-sans transition-colors">👤 Klientrelevans</button>
-              )}
-              <button onClick={onGemToggle}
-                className={`text-xs px-3 py-1.5 rounded-lg border font-sans transition-colors ${gemt ? "border-amber-300 text-amber-600 bg-amber-50" : "border-slate-200 text-slate-600 hover:border-amber-300"}`}>
-                {gemt ? "★ Gemt" : "☆ Gem"}
-              </button>
+              {a.klientrelevans_spørgsmål && <button onClick={() => setVisKlient(true)} className="text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 hover:border-blue-400 font-sans transition-colors">👤 Anvendelig i min sag?</button>}
+              <button onClick={onGemToggle} className={`text-xs px-3 py-1.5 rounded-lg border font-sans transition-colors ${gemt ? "border-amber-300 text-amber-600 bg-amber-50" : "border-slate-200 text-slate-600 hover:border-amber-300"}`}>{gemt ? "★ Gemt" : "☆ Gem"}</button>
               <button onClick={eksporter} className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-slate-400 font-sans transition-colors">↓ Eksporter</button>
             </div>
           </div>
@@ -553,7 +568,6 @@ export default function Page() {
         </div>
       </header>
 
-      {/* Søgebar */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-6 py-5 space-y-4">
           <div className="space-y-3">
@@ -561,9 +575,10 @@ export default function Page() {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 font-sans">
                 Søg på emne eller lovbestemmelse
               </label>
-              <input type="text" value={søgeTekst} onChange={e => setSøgeTekst(e.target.value.replace(/[""""]/g, ""))}
+              <input type="text" value={søgeTekst}
+                onChange={e => setSøgeTekst(e.target.value.replace(/[""""]/g, ""))}
                 onKeyDown={e => e.key === "Enter" && søg()}
-                placeholder='fx "ligningslovens § 8 y", "fri bil", "transfer pricing"'
+                placeholder="fx ligningslovens § 8 y, fri bil, transfer pricing"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-400 font-sans" />
             </div>
             <div>
@@ -607,7 +622,6 @@ export default function Page() {
       </div>
 
       <main className="max-w-3xl mx-auto px-6 py-7">
-        {/* Start */}
         {trin === "start" && !loading && (
           <div className="text-center py-20">
             <div className="text-5xl mb-4">⚖️</div>
@@ -618,7 +632,6 @@ export default function Page() {
           </div>
         )}
 
-        {/* Loading */}
         {loading && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <div className="w-10 h-10 border-2 border-slate-200 border-t-slate-700 rounded-full animate-spin" />
@@ -629,23 +642,14 @@ export default function Page() {
           </div>
         )}
 
-        {/* Fejl */}
         {fejl && <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-red-700 text-sm font-sans mb-4">{fejl}</div>}
 
-        {/* Trin 1: Overblik */}
         {!loading && trin === "overblik" && overblik && (
-          <OverblikPanel
-            overblik={overblik}
-            cacheId={cacheId}
-            onAnalyser={analyser}
-            onHentFlere={hentFlere}
-            onHentAlle={hentAlle}
-            loadingFlere={loadingFlere}
-            loadingAlle={loadingAlle}
-          />
+          <OverblikPanel overblik={overblik} cacheId={cacheId}
+            onAnalyser={analyser} onHentFlere={hentFlere} onHentAlle={hentAlle}
+            loadingFlere={loadingFlere} loadingAlle={loadingAlle} />
         )}
 
-        {/* Trin 2: Resultater */}
         {!loading && trin === "resultater" && (
           <>
             {afgørelser.length === 0 ? (
