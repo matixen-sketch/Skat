@@ -561,7 +561,7 @@ export default function Page() {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 font-sans">
                 Søg på emne eller lovbestemmelse
               </label>
-              <input type="text" value={søgeTekst} onChange={e => setSøgeTekst(e.target.value)}
+              <input type="text" value={søgeTekst} onChange={e => setSøgeTekst(e.target.value.replace(/[""""]/g, ""))}
                 onKeyDown={e => e.key === "Enter" && søg()}
                 placeholder='fx "ligningslovens § 8 y", "fri bil", "transfer pricing"'
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-400 font-sans" />
