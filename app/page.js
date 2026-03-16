@@ -94,11 +94,7 @@ function OverblikHit({ hit, valgt, anbefalet, onToggle, cacheId }) {
     </label>
   );
 }
-  const [valgte, setValgte] = useState(() => {
-    const init = {};
-    (overblik.grupper || []).forEach(g => (g.anbefalede || []).forEach(i => { init[i] = true; }));
-    return init;
-  });
+  const [valgte, setValgte] = useState({});
 
   const toggleIndeks = i => setValgte(v => ({ ...v, [i]: !v[i] }));
   const toggleGruppe = (g, til) => {
@@ -191,12 +187,14 @@ function OverblikHit({ hit, valgt, anbefalet, onToggle, cacheId }) {
         );
       })}
 
-      <button onClick={() => onAnalyser(Object.keys(valgte).filter(k => valgte[k]).map(Number))}
-        disabled={antalValgte === 0}
-        className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-colors disabled:opacity-50 font-sans"
-        style={{ background: antalValgte === 0 ? "#64748b" : "#18293d" }}>
-        Analyser {antalValgte} valgte afgørelser
-      </button>
+      <div className="sticky bottom-0 bg-white border-t border-slate-200 px-5 py-3 -mx-0 mt-4">
+        <button onClick={() => onAnalyser(Object.keys(valgte).filter(k => valgte[k]).map(Number))}
+          disabled={antalValgte === 0}
+          className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-colors disabled:opacity-50 font-sans"
+          style={{ background: antalValgte === 0 ? "#64748b" : "#18293d" }}>
+          {antalValgte === 0 ? "Vælg afgørelser for at analysere" : `Analyser ${antalValgte} valgte afgørelser`}
+        </button>
+      </div>
     </div>
   );
 }
