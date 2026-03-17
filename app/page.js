@@ -542,7 +542,9 @@ export default function Page() {
   const nulstil = () => { setTrin("start"); setOverblik(null); setAfgørelser([]); setSammendrag(null); setFejl(null); setCacheId(null); };
   const toggleGem = id => setGemte(g => ({ ...g, [id]: !g[id] }));
   const updateNote = (id, t) => setNoter(n => ({ ...n, [id]: t }));
-  const visteListe = visKunGemte ? afgørelser.filter(a => gemte[a.id]) : afgørelser;
+  const visteListe = afgørelser
+    .filter(a => valgtSagstype === "Alle" || a.sagstype === valgtSagstype)
+    .filter(a => !visKunGemte || gemte[a.id]);
   const antalGemte = Object.values(gemte).filter(Boolean).length;
   const højRelevans = afgørelser.filter(a => a.relevans === "høj").length;
 
@@ -584,21 +586,24 @@ export default function Page() {
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 font-sans">
                 Beskriv din konkrete sag{" "}
-                <span className="text-slate-400 normal-case font-normal">(valgfrit — bruges til at finde de mest relevante afgørelser)</span>
+                <span className="text-slate-400 normal-case font-normal">(udfyld for at få anbefalinger tilpasset din sag)</span>
               </label>
               <textarea value={sagsbeskrivelse} onChange={e => setSagsbeskrivelse(e.target.value)}
-                placeholder="fx: Min klient er selvstændig konsulent der ønsker at fradrage udgifter til hjemmekontor. Skattestyrelsen har nægtet fradrag med henvisning til at arbejdet primært udføres hos klienterne..."
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-400 font-sans resize-none h-20" />
+                placeholder="Beskriv sagens faktum, det retlige spørgsmål og hvad du søger at argumentere for. Jo mere præcist du beskriver sagen, jo bedre kan AI'en anbefale relevante afgørelser. fx: Min klient drev selvstændig virksomhed og betalte kontant for varer til 45.000 kr. Skattestyrelsen nægter fradrag efter LL § 8 Y. Spørgsmålet er om der er mulighed for genoptagelse ved efterfølgende indberetning."
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-400 font-sans resize-none h-28" />
+              {sagsbeskrivelse.length > 0 && sagsbeskrivelse.length < 80 && (
+                <p className="text-xs text-amber-600 font-sans mt-1">
+                  ⚠ Skriv lidt mere for at få præcise anbefalinger — beskriv faktum og det retlige spørgsmål
+                </p>
+              )}
+              {sagsbeskrivelse.length >= 80 && (
+                <p className="text-xs text-emerald-600 font-sans mt-1">
+                  ✓ God beskrivelse — AI vil nu anbefale afgørelser baseret på din konkrete sag
+                </p>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap gap-3 items-center">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 font-sans">Udfald</label>
-              <select value={valgtSagstype} onChange={e => setValgtSagstype(e.target.value)}
-                className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white outline-none cursor-pointer font-sans">
-                {SAGSTYPER.map(s => <option key={s}>{s}</option>)}
-              </select>
-            </div>
             <button onClick={søg} disabled={loading}
               className="px-6 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 font-sans mt-5"
               style={{ background: loading ? "#64748b" : "#18293d" }}>
@@ -663,13 +668,18 @@ export default function Page() {
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-sm text-slate-500 font-sans">
                     {søgeTekst ? `"${søgeTekst}"` : "Nyeste afgørelser"}
-                    {valgtSagstype !== "Alle" && ` · ${valgtSagstype}`}
                     {visKunGemte && " · Gemte"}
                   </p>
-                  <div className="flex items-center gap-3 text-xs text-slate-400 font-sans">
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" />Høj</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-300 inline-block" />Middel</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-200 inline-block" />Lav</span>
+                  <div className="flex items-center gap-3">
+                    <select value={valgtSagstype} onChange={e => setValgtSagstype(e.target.value)}
+                      className="border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-600 bg-white outline-none cursor-pointer font-sans">
+                      {SAGSTYPER.map(s => <option key={s}>{s}</option>)}
+                    </select>
+                    <div className="flex items-center gap-2 text-xs text-slate-400 font-sans">
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" />Høj</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-300 inline-block" />Middel</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-200 inline-block" />Lav</span>
+                    </div>
                   </div>
                 </div>
                 <SammendragPanel s={sammendrag} />
