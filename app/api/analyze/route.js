@@ -1,4 +1,25 @@
-const PORTAL_ID = "62c3f8f5-dca9-4058-918f-d8470a3ff3dd";
+async function grupperMedClaude(kandidater, søgeTekst, sagsbeskrivelse) {
+  const sagskontekst = sagsbeskrivelse
+    ? `\n\nAdvokatens sagsbeskrivelse: "${sagsbeskrivelse}"\nBrug denne til at prioritere afgørelser der er relevante for netop denne sag.`
+    : "";
+
+  const topKandidater = kandidater.slice(0, 60).map(k => ({
+    ...k,
+    snippet: k.snippet?.slice(0, 150) || "",
+  }));
+
+  const result = await claudeJSON(`Du er erfaren dansk skatteadvokat. Søgning: "${søgeTekst}"${sagskontekst}
+
+Analyser disse ${topKandidater.length} afgørelser og gruppér de relevante i 3-6 temagrupper.
+
+${topKandidater.map(k => `[${k.i}] ${k.id} | ${k.dato} | ${k.snippet}`).join("\n")}
+
+Returner KUN dette JSON:
+{
+  "grupper": [
+    {
+      "navn": "Kort gruppenavn",
+      "beskrivelse": "1-2 sætconst PORTAL_ID = "62c3f8f5-dca9-4058-918f-d8470a3ff3dd";
 const BASE_URL = `https://afgoerelsesdatabasen.dk/api/v1/portals/${PORTAL_ID}`;
 
 const hitsCache = new Map();
@@ -189,6 +210,7 @@ function byggKandidater(resultater, startIndeks) {
     id: r.FullName,
     dato: new Date(r.date_release || r.date_created).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }),
     snippet: (Array.isArray(r.Snippets) ? r.Snippets : []).join(" … ").slice(0, 500),
+    _raw: r, // Gem rådata til fuld teksthentning
   }));
 }
 
