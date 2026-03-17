@@ -113,27 +113,32 @@ async function grupperMedClaude(kandidater, søgeTekst, sagsbeskrivelse) {
   const sagskontekst = sagsbeskrivelse
     ? `\n\nAdvokatens sagsbeskrivelse: "${sagsbeskrivelse}"\nBrug denne til at prioritere afgørelser der er relevante for netop denne sag.`
     : "";
+
+  // Begræns til top 60 og trim snippets for at holde prompt-størrelsen nede
+  const topKandidater = kandidater.slice(0, 60).map(k => ({
+    ...k,
+    snippet: k.snippet?.slice(0, 150) || "",
+  }));
+
   return claudeJSON(`Du er erfaren dansk skatteadvokat. Søgning: "${søgeTekst}"${sagskontekst}
 
-Analyser disse ${kandidater.length} afgørelser og FRASORTER alle der ikke direkte og specifikt handler om søgningen "${søgeTekst}". Medtag KUN afgørelser hvor resuméet tydeligt viser at afgørelsen omhandler dette emne.
+Analyser disse ${topKandidater.length} afgørelser og FRASORTER alle der ikke direkte handler om "${søgeTekst}". Gruppér de relevante i 3-6 temagrupper.
 
-Gruppér de relevante afgørelser i 3-6 juridiske temagrupper.
-
-${kandidater.map(k => `[${k.i}] ${k.id} | ${k.dato} | ${k.snippet}`).join("\n")}
+${topKandidater.map(k => `[${k.i}] ${k.id} | ${k.dato} | ${k.snippet}`).join("\n")}
 
 Returner KUN dette JSON:
 {
   "grupper": [
     {
       "navn": "Kort gruppenavn",
-      "beskrivelse": "1-2 sætninger om hvad afgørelserne handler om",
+      "beskrivelse": "1-2 sætninger",
       "indeks": [0, 3, 7],
       "årsSpænd": "2012–2024",
       "anbefalede": [0, 3],
-      "anbefaletBegrundelse": "Disse er anbefalet fordi..."
+      "anbefaletBegrundelse": "Anbefalet fordi..."
     }
   ]
-}`, 2500);
+}`, 3000);
 }
 
 async function analyserAfgørelse(afgørelse, tekst) {
